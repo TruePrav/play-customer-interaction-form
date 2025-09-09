@@ -310,8 +310,8 @@ export default function InteractionsPage() {
               />
             )}
 
-            {/* Out of Stock - only show if purchased = false */}
-            {watchedPurchased === false && (
+            {/* Out of Stock - show for all interactions */}
+            {watchedChannel && (
               <FormField
                 control={form.control}
                 name="outOfStock"
@@ -366,7 +366,7 @@ export default function InteractionsPage() {
               />
             )}
 
-            {/* Wanted Item - only show if outOfStock = true */}
+            {/* Wanted Item - show if outOfStock = true */}
             {watchedOutOfStock === true && (
               <FormField
                 control={form.control}
