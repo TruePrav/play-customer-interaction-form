@@ -1,8 +1,17 @@
 import { z } from "zod";
-import type { InteractionFormData } from "@/types/interaction";
 
 // Base schema
 const baseSchema = z.object({
+  staffName: z.enum([
+    "Mohammed",
+    "Shelly",
+    "Kemar", 
+    "Dameon",
+    "Carson",
+    "Mahesh",
+    "Sunil",
+    "Praveen"
+  ]),
   channel: z.enum([
     "In-store",
     "Phone", 
@@ -12,6 +21,7 @@ const baseSchema = z.object({
     "Email",
     "Other"
   ]),
+  otherChannel: z.string().min(1).max(60).optional(),
   branch: z.enum(["Bridgetown", "Sheraton"]).optional(),
   category: z.enum([
     "Digital Cards",
@@ -24,13 +34,26 @@ const baseSchema = z.object({
     "Other"
   ]),
   otherCategory: z.string().min(1).max(60).optional(),
-  purchased: z.boolean(),
+  purchased: z.boolean().optional(),
   outOfStock: z.boolean().optional(),
-  wantedItem: z.string().min(1).max(120).optional(),
+  wantedItem: z.string().min(1).max(120),
 });
 
 // Refined schema with conditional validation
 export const interactionSchema = baseSchema
+  .refine(
+    (data) => {
+      // If channel is "Other", otherChannel is required
+      if (data.channel === "Other") {
+        return data.otherChannel !== undefined && data.otherChannel.length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Please specify the channel",
+      path: ["otherChannel"],
+    }
+  )
   .refine(
     (data) => {
       // If channel is "In-store", branch is required
@@ -59,6 +82,19 @@ export const interactionSchema = baseSchema
   )
   .refine(
     (data) => {
+      // If channel is In-store or WhatsApp, purchased is required
+      if (data.channel === "In-store" || data.channel === "WhatsApp") {
+        return data.purchased !== undefined;
+      }
+      return true;
+    },
+    {
+      message: "Please specify if they made a purchase",
+      path: ["purchased"],
+    }
+  )
+  .refine(
+    (data) => {
       // If purchased is false, outOfStock is required
       if (data.purchased === false) {
         return data.outOfStock !== undefined;
@@ -66,21 +102,8 @@ export const interactionSchema = baseSchema
       return true;
     },
     {
-      message: "Please specify if the item was out of stock",
+      message: "Please specify if the item was in stock",
       path: ["outOfStock"],
-    }
-  )
-  .refine(
-    (data) => {
-      // If outOfStock is true, wantedItem is required
-      if (data.outOfStock === true) {
-        return data.wantedItem !== undefined && data.wantedItem.length > 0;
-      }
-      return true;
-    },
-    {
-      message: "Please specify what they wanted",
-      path: ["wantedItem"],
     }
   );
 

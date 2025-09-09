@@ -1,3 +1,13 @@
+export type StaffName =
+  | "Mohammed"
+  | "Shelly"
+  | "Kemar"
+  | "Dameon"
+  | "Carson"
+  | "Mahesh"
+  | "Sunil"
+  | "Praveen";
+
 export type Channel =
   | "In-store"
   | "Phone"
@@ -21,21 +31,25 @@ export type Category =
 
 export interface InteractionPayload {
   timestamp: string; // set on server
+  staffName: StaffName;
   channel: Channel;
+  otherChannel?: string; // required if channel = Other
   branch?: Branch; // required if channel = In-store
   category: Category;
   otherCategory?: string; // required if category = Other
-  purchased: boolean;
+  wantedItem: string; // always required
+  purchased?: boolean; // required if channel = In-store or WhatsApp
   outOfStock?: boolean; // required if purchased = false
-  wantedItem?: string; // required if outOfStock = true
 }
 
 export interface InteractionFormData {
+  staffName: StaffName;
   channel: Channel;
+  otherChannel?: string;
   branch?: Branch;
   category: Category;
   otherCategory?: string;
-  purchased: boolean;
+  wantedItem: string;
+  purchased?: boolean;
   outOfStock?: boolean;
-  wantedItem?: string;
 }

@@ -49,6 +49,17 @@ const CATEGORIES: Category[] = [
   "Other"
 ];
 
+const STAFF_MEMBERS = [
+  "Mohammed",
+  "Shelly", 
+  "Kemar",
+  "Dameon",
+  "Carson",
+  "Mahesh",
+  "Sunil",
+  "Praveen"
+];
+
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const firstFieldRef = useRef<HTMLDivElement>(null);
@@ -56,7 +67,9 @@ export default function InteractionsPage() {
   const form = useForm<InteractionFormSchema>({
     resolver: zodResolver(interactionSchema),
     defaultValues: {
+      staffName: undefined,
       channel: undefined,
+      otherChannel: "",
       branch: undefined,
       category: undefined,
       otherCategory: "",
@@ -69,7 +82,6 @@ export default function InteractionsPage() {
   const watchedChannel = form.watch("channel");
   const watchedCategory = form.watch("category");
   const watchedPurchased = form.watch("purchased");
-  const watchedOutOfStock = form.watch("outOfStock");
 
   // Autofocus the first field
   useEffect(() => {
@@ -138,6 +150,32 @@ export default function InteractionsPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
+            {/* Staff Name */}
+            <FormField
+              control={form.control}
+              name="staffName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-lg font-semibold text-gray-800">Staff Name *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                        <SelectValue placeholder="Select staff member" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {STAFF_MEMBERS.map((staff) => (
+                        <SelectItem key={staff} value={staff}>
+                          {staff}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {/* Channel */}
             <FormField
               control={form.control}
@@ -179,6 +217,27 @@ export default function InteractionsPage() {
               )}
             />
 
+            {/* Other Channel - only show if Other */}
+            {watchedChannel === "Other" && (
+              <FormField
+                control={form.control}
+                name="otherChannel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-lg font-semibold text-gray-800">Specify Channel *</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g., TikTok, Snapchat, Website chat"
+                        className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             {/* Branch - only show if In-store */}
             {watchedChannel === "In-store" && (
               <FormField
@@ -189,7 +248,7 @@ export default function InteractionsPage() {
                   <FormLabel className="text-lg font-semibold text-gray-800">Branch *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                      <SelectTrigger className="h-16 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-lg">
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                     </FormControl>
@@ -216,7 +275,7 @@ export default function InteractionsPage() {
                   <FormLabel className="text-lg font-semibold text-gray-800">Category *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                      <SelectTrigger className="h-16 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-lg">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                     </FormControl>
@@ -254,14 +313,35 @@ export default function InteractionsPage() {
               />
             )}
 
-            {/* Did They Purchase - only show for In-store and WhatsApp */}
+            {/* Which item were they interested in - show for all interactions */}
+            {watchedChannel && (
+              <FormField
+                control={form.control}
+                name="wantedItem"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-lg font-semibold text-gray-800">Which item were they interested in? *</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g., Roblox $50, PS5 controller, SD card 128GB"
+                        className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Did they make a purchase - only show for In-store and WhatsApp */}
             {(watchedChannel === "In-store" || watchedChannel === "WhatsApp") && (
               <FormField
                 control={form.control}
                 name="purchased"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-lg font-semibold text-gray-800">Did They Purchase? *</FormLabel>
+                    <FormLabel className="text-lg font-semibold text-gray-800">Did they make a purchase? *</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) => field.onChange(value === "true")}
@@ -310,14 +390,14 @@ export default function InteractionsPage() {
               />
             )}
 
-            {/* Out of Stock - show for all interactions */}
-            {watchedChannel && (
+            {/* Was the item in stock - only show if purchased = false */}
+            {watchedPurchased === false && (
               <FormField
                 control={form.control}
                 name="outOfStock"
                 render={({ field }) => (
-                                  <FormItem>
-                  <FormLabel className="text-lg font-semibold text-gray-800">Did they want something we didn&apos;t have in stock? *</FormLabel>
+                  <FormItem>
+                    <FormLabel className="text-lg font-semibold text-gray-800">Was the item in stock? *</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) => field.onChange(value === "true")}
@@ -355,32 +435,11 @@ export default function InteractionsPage() {
                                 : "border-gray-200 bg-white text-gray-700"
                             }`}
                           >
-                            No/Just Browsing
+                            No
                           </Label>
                         </div>
                       </RadioGroup>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Wanted Item - show if outOfStock = true */}
-            {watchedOutOfStock === true && (
-              <FormField
-                control={form.control}
-                name="wantedItem"
-                render={({ field }) => (
-                                  <FormItem>
-                  <FormLabel className="text-lg font-semibold text-gray-800">What did they want? *</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="e.g., Roblox $50, PS5 controller, SD card 128GB"
-                      className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                    />
-                  </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
