@@ -31,11 +31,11 @@ export type Category =
 
 export interface InteractionPayload {
   timestamp: string; // set on server
-  staffName: StaffName;
-  channel: Channel;
+  staffName: string;
+  channel: string;
   otherChannel?: string; // required if channel = Other
-  branch?: Branch; // required if channel = In-store
-  category: Category;
+  branch?: string; // required if channel = In-store
+  category: string;
   otherCategory?: string; // required if category = Other
   wantedItem: string; // always required
   purchased?: boolean; // required if channel = In-store or WhatsApp
@@ -43,11 +43,11 @@ export interface InteractionPayload {
 }
 
 export interface InteractionFormData {
-  staffName: StaffName;
-  channel: Channel;
+  staffName: string;
+  channel: string;
   otherChannel?: string;
-  branch?: Branch;
-  category: Category;
+  branch?: string;
+  category: string;
   otherCategory?: string;
   wantedItem: string;
   purchased?: boolean;
