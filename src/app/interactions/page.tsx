@@ -226,7 +226,7 @@ export default function InteractionsPage() {
                       <RadioGroup
                         onValueChange={field.onChange}
                         value={field.value}
-                        className="grid grid-cols-2 gap-3"
+                        className="grid grid-cols-3 gap-3"
                       >
                       {CHANNELS.map((channel) => (
                         <div key={channel} className="flex items-center space-x-2">
