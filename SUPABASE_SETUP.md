@@ -70,7 +70,7 @@ ALTER TABLE interactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 
 -- Create policies
-CREATE POLICY "Allow insert interactions" ON interactions
+CREATE POLICY "Allow anonymous insert interactions" ON interactions
   FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Allow admin read interactions" ON interactions

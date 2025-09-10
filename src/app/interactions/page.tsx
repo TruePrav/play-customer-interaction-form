@@ -114,13 +114,48 @@ export default function InteractionsPage() {
       });
 
       if (response.ok) {
-        form.reset();
-        toast.success("Saved");
+        // Clear all form errors first
+        form.clearErrors();
+        
+        // Reset form to default values - use empty strings for all fields
+        form.reset({
+          staffName: "",
+          channel: "",
+          otherChannel: "",
+          branch: "",
+          category: "",
+          otherCategory: "",
+          purchased: undefined,
+          outOfStock: undefined,
+          wantedItem: "",
+        });
+        
+        // Force form to re-render and clear validation state
+        setTimeout(() => {
+          form.clearErrors();
+          // Force a re-render by setting values again
+          form.setValue("staffName", "");
+          form.setValue("channel", "");
+          form.setValue("branch", "");
+          form.setValue("category", "");
+        }, 50);
+        
+        toast.success("Interaction saved successfully!");
+        
+        // Auto-focus the staff name dropdown for the next interaction
+        setTimeout(() => {
+          const staffSelect = document.querySelector('[data-name="staffName"] button') as HTMLButtonElement;
+          if (staffSelect) {
+            staffSelect.focus();
+          }
+        }, 100);
       } else {
-        throw new Error("Failed to save");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save");
       }
-    } catch {
-      toast.error("Try again");
+    } catch (error) {
+      console.error("Form submission error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to save. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -159,7 +194,10 @@ export default function InteractionsPage() {
                   <FormLabel className="text-lg font-semibold text-gray-800">Staff Name *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                      <SelectTrigger 
+                        className="h-14 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-medium hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        data-name="staffName"
+                      >
                         <SelectValue placeholder="Select staff member" />
                       </SelectTrigger>
                     </FormControl>

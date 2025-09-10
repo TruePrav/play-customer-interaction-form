@@ -2,38 +2,12 @@ import { z } from "zod";
 
 // Base schema
 const baseSchema = z.object({
-  staffName: z.enum([
-    "Mohammed",
-    "Shelly",
-    "Kemar", 
-    "Dameon",
-    "Carson",
-    "Mahesh",
-    "Sunil",
-    "Praveen"
-  ]),
-  channel: z.enum([
-    "In-store",
-    "Phone", 
-    "WhatsApp",
-    "Instagram",
-    "Facebook",
-    "Email",
-    "Other"
-  ]),
-  otherChannel: z.string().min(1).max(60).optional(),
-  branch: z.enum(["Bridgetown", "Sheraton"]).optional(),
-  category: z.enum([
-    "Digital Cards",
-    "Consoles", 
-    "Games",
-    "Accessories",
-    "Repair/Service",
-    "Pokemon Cards",
-    "Electronics",
-    "Other"
-  ]),
-  otherCategory: z.string().min(1).max(60).optional(),
+  staffName: z.string(),
+  channel: z.string(),
+  otherChannel: z.string().max(60).optional(),
+  branch: z.string().optional(),
+  category: z.string(),
+  otherCategory: z.string().max(60).optional(),
   purchased: z.boolean().optional(),
   outOfStock: z.boolean().optional(),
   wantedItem: z.string().min(1).max(120),
@@ -43,9 +17,39 @@ const baseSchema = z.object({
 export const interactionSchema = baseSchema
   .refine(
     (data) => {
+      // Staff name is required
+      return data.staffName && data.staffName.trim().length > 0;
+    },
+    {
+      message: "Please select a staff member",
+      path: ["staffName"],
+    }
+  )
+  .refine(
+    (data) => {
+      // Channel is required
+      return data.channel && data.channel.trim().length > 0;
+    },
+    {
+      message: "Please select a channel",
+      path: ["channel"],
+    }
+  )
+  .refine(
+    (data) => {
+      // Category is required
+      return data.category && data.category.trim().length > 0;
+    },
+    {
+      message: "Please select a category",
+      path: ["category"],
+    }
+  )
+  .refine(
+    (data) => {
       // If channel is "Other", otherChannel is required
       if (data.channel === "Other") {
-        return data.otherChannel !== undefined && data.otherChannel.length > 0;
+        return data.otherChannel && data.otherChannel.trim().length > 0;
       }
       return true;
     },
@@ -58,7 +62,7 @@ export const interactionSchema = baseSchema
     (data) => {
       // If channel is "In-store", branch is required
       if (data.channel === "In-store") {
-        return data.branch !== undefined;
+        return data.branch && data.branch.trim().length > 0;
       }
       return true;
     },
@@ -71,7 +75,7 @@ export const interactionSchema = baseSchema
     (data) => {
       // If category is "Other", otherCategory is required
       if (data.category === "Other") {
-        return data.otherCategory !== undefined && data.otherCategory.length > 0;
+        return data.otherCategory && data.otherCategory.trim().length > 0;
       }
       return true;
     },
