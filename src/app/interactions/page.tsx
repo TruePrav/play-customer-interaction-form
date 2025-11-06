@@ -36,12 +36,25 @@ export default function InteractionsPage() {
   const firstFieldRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Small delay to ensure Supabase client is initialized
-    const timer = setTimeout(() => {
-      fetchFormOptions();
-    }, 100);
+    // Ensure Supabase client is ready before fetching
+    const initializeAndFetch = async () => {
+      try {
+        // Small delay to ensure Supabase client is fully initialized
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Verify Supabase client is working by checking URL
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co') {
+          console.error('Supabase not configured!');
+          return;
+        }
+        
+        fetchFormOptions();
+      } catch (err) {
+        console.error('Error initializing form options:', err);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    initializeAndFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -54,11 +67,19 @@ export default function InteractionsPage() {
     // Helper to fetch with retry logic for individual queries
     const fetchWithRetry = async <T extends { name: string }>(
       queryFn: () => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
-      retry: number = 0
+      retry: number = 0,
+      tableName: string
     ): Promise<T[] | null> => {
       try {
-        const result = await queryFn();
+        // Add timeout to prevent hanging queries
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Query timeout for ${tableName}`)), 10000); // 10 second timeout
+        });
+        
+        const queryPromise = queryFn();
+        const result = await Promise.race([queryPromise, timeoutPromise]);
         const { data, error } = result;
+        
         if (error) {
           // Check if it's a network error that might be retryable
           const isNetworkError = Boolean(
@@ -70,10 +91,10 @@ export default function InteractionsPage() {
           
           if (isNetworkError && retry < 2) {
             await new Promise(resolve => setTimeout(resolve, 500 * (retry + 1)));
-            return fetchWithRetry(queryFn, retry + 1);
+            return fetchWithRetry(queryFn, retry + 1, tableName);
           }
           
-          console.error('Fetch error:', error);
+          console.error(`Error fetching ${tableName}:`, error);
           hasNetworkError = hasNetworkError || isNetworkError;
           return null;
         }
@@ -82,37 +103,60 @@ export default function InteractionsPage() {
           hasAnySuccess = true;
           return data;
         }
+        
         return null;
       } catch (err) {
-        console.error('Fetch exception:', err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        
+        // Check if it's a timeout error and retry
+        if (errorMessage.includes('timeout') && retry < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retry + 1)));
+          return fetchWithRetry(queryFn, retry + 1, tableName);
+        }
+        
+        console.error(`Exception fetching ${tableName}:`, errorMessage);
+        hasNetworkError = true;
         return null;
       }
     };
 
     try {
-      // Fetch all options in parallel - if one fails, others can still succeed
-      const [staffData, channelData, branchData, categoryData] = await Promise.all([
+      // Use Promise.allSettled instead of Promise.all to handle individual failures
+      const results = await Promise.allSettled([
         fetchWithRetry(() => supabase
           .from('staff_members')
           .select('name')
           .eq('active', true)
-          .order('display_order')),
+          .order('display_order'), 0, 'staff_members'),
         fetchWithRetry(() => supabase
           .from('channels')
           .select('name')
           .eq('active', true)
-          .order('display_order')),
+          .order('display_order'), 0, 'channels'),
         fetchWithRetry(() => supabase
           .from('branches')
           .select('name')
           .eq('active', true)
-          .order('display_order')),
+          .order('display_order'), 0, 'branches'),
         fetchWithRetry(() => supabase
           .from('categories')
           .select('name')
           .eq('active', true)
-          .order('display_order')),
+          .order('display_order'), 0, 'categories'),
       ]);
+      
+      // Extract data from settled promises
+      const staffData = results[0].status === 'fulfilled' ? results[0].value : null;
+      const channelData = results[1].status === 'fulfilled' ? results[1].value : null;
+      const branchData = results[2].status === 'fulfilled' ? results[2].value : null;
+      const categoryData = results[3].status === 'fulfilled' ? results[3].value : null;
+      
+      // Log any rejected promises
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(`Query ${index} rejected:`, result.reason);
+        }
+      });
 
       // Set data for each option (use fallback if fetch failed)
       if (staffData && staffData.length > 0) {
@@ -141,7 +185,6 @@ export default function InteractionsPage() {
 
       // If we had network errors and no success, retry the whole operation
       if (hasNetworkError && !hasAnySuccess && retryCount < 2) {
-        console.log(`Retrying all fetchFormOptions (attempt ${retryCount + 1}/2)...`);
         setTimeout(() => fetchFormOptions(retryCount + 1), 1000 * (retryCount + 1));
         return;
       }

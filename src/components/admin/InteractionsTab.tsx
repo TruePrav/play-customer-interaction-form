@@ -129,7 +129,7 @@ export default function InteractionsTab() {
         .eq('active', true)
         .order('display_order');
       
-      if (staffData) {
+      if (staffData && staffData.length > 0) {
         setStaffOptions(staffData.map(s => s.name));
       }
 
@@ -140,7 +140,7 @@ export default function InteractionsTab() {
         .eq('active', true)
         .order('display_order');
       
-      if (channelData) {
+      if (channelData && channelData.length > 0) {
         setChannelOptions(channelData.map(c => c.name));
       }
 
@@ -151,7 +151,7 @@ export default function InteractionsTab() {
         .eq('active', true)
         .order('display_order');
       
-      if (branchData) {
+      if (branchData && branchData.length > 0) {
         setBranchOptions(branchData.map(b => b.name));
       }
 
@@ -162,7 +162,7 @@ export default function InteractionsTab() {
         .eq('active', true)
         .order('display_order');
       
-      if (categoryData) {
+      if (categoryData && categoryData.length > 0) {
         setCategoryOptions(categoryData.map(c => c.name));
       }
     } catch (err) {
@@ -177,6 +177,7 @@ export default function InteractionsTab() {
       
       // Ensure we have a session before querying
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (!session) {
         // Wait a bit and retry if no session yet
         if (retryCount < 3) {
@@ -194,7 +195,6 @@ export default function InteractionsTab() {
       if (error) {
         // Retry on auth errors
         if ((error.message.includes('JWT') || error.message.includes('session')) && retryCount < 2) {
-          console.log('Session error, retrying...', retryCount);
           setTimeout(() => fetchInteractions(retryCount + 1), 1000);
           return;
         }
@@ -204,6 +204,7 @@ export default function InteractionsTab() {
       setInteractions(data || []);
       setFilteredInteractions(data || []);
     } catch (err) {
+      console.error('Error fetching interactions:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch interactions');
     } finally {
       setLoading(false);
