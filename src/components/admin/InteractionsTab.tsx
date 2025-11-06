@@ -112,6 +112,7 @@ export default function InteractionsTab() {
       fetchInteractions();
       fetchFormOptions();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, sessionReady, session]);
 
   useEffect(() => {
@@ -290,7 +291,7 @@ export default function InteractionsTab() {
       <div className="text-center py-8">
         <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
         <p className="text-gray-600 mb-4">{error}</p>
-        <Button onClick={fetchInteractions}>Try Again</Button>
+        <Button onClick={() => fetchInteractions()}>Try Again</Button>
       </div>
     );
   }
@@ -310,7 +311,7 @@ export default function InteractionsTab() {
           )}
         </div>
         <div className="flex gap-3">
-          <Button onClick={fetchInteractions} variant="outline">
+          <Button onClick={() => fetchInteractions()} variant="outline">
             Refresh
           </Button>
           <Button onClick={exportToCSV} className="bg-green-600 hover:bg-green-700">

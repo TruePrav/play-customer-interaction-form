@@ -42,6 +42,7 @@ export default function InteractionsPage() {
     }, 100);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchFormOptions = async (retryCount = 0) => {
@@ -51,22 +52,25 @@ export default function InteractionsPage() {
     let hasNetworkError = false;
 
     // Helper to fetch with retry logic for individual queries
-    const fetchWithRetry = async <T,>(
-      fetchFn: () => Promise<{ data: T[] | null; error: any }>,
+    const fetchWithRetry = async <T extends { name: string }>(
+      queryFn: () => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
       retry: number = 0
     ): Promise<T[] | null> => {
       try {
-        const { data, error } = await fetchFn();
+        const result = await queryFn();
+        const { data, error } = result;
         if (error) {
           // Check if it's a network error that might be retryable
-          const isNetworkError = error.message?.includes('fetch') || 
-                                 error.message?.includes('network') ||
-                                 error.message?.includes('Failed to fetch') ||
-                                 error.message?.includes('timeout');
+          const isNetworkError = Boolean(
+            error.message?.includes('fetch') || 
+            error.message?.includes('network') ||
+            error.message?.includes('Failed to fetch') ||
+            error.message?.includes('timeout')
+          );
           
           if (isNetworkError && retry < 2) {
             await new Promise(resolve => setTimeout(resolve, 500 * (retry + 1)));
-            return fetchWithRetry(fetchFn, retry + 1);
+            return fetchWithRetry(queryFn, retry + 1);
           }
           
           console.error('Fetch error:', error);
