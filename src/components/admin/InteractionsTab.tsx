@@ -108,9 +108,13 @@ export default function InteractionsTab() {
   useEffect(() => {
     // Wait for auth to finish loading AND ensure session is ready
     if (!authLoading && sessionReady && session) {
-      // Session is ready, fetch data
-      fetchInteractions();
-      fetchFormOptions();
+      // Small delay to ensure everything is settled in production
+      const timer = setTimeout(() => {
+        fetchInteractions();
+        fetchFormOptions();
+      }, 200);
+      
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, sessionReady, session]);
@@ -312,8 +316,29 @@ export default function InteractionsTab() {
           )}
         </div>
         <div className="flex gap-3">
-          <Button onClick={() => fetchInteractions()} variant="outline">
-            Refresh
+          <Button 
+            onClick={() => {
+              fetchInteractions();
+              fetchFormOptions();
+            }} 
+            variant="outline"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <svg className="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </>
+            )}
           </Button>
           <Button onClick={exportToCSV} className="bg-green-600 hover:bg-green-700">
             Export CSV

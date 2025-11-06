@@ -37,20 +37,37 @@ export default function InteractionsPage() {
 
   useEffect(() => {
     // Ensure Supabase client is ready before fetching
-    const initializeAndFetch = async () => {
+    const initializeAndFetch = async (attempt = 0) => {
       try {
-        // Small delay to ensure Supabase client is fully initialized
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Progressive delay for production environments
+        // Production builds may need more time for client initialization
+        const delays = [300, 500, 800, 1000];
+        const delay = attempt < delays.length ? delays[attempt] : 1000;
         
-        // Verify Supabase client is working by checking URL
-        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co') {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // Verify Supabase client is configured
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
+          // Retry if URL not ready (might be a hydration issue)
+          if (attempt < 3) {
+            setTimeout(() => initializeAndFetch(attempt + 1), 1000);
+            return;
+          }
           console.error('Supabase not configured!');
           return;
         }
         
+        // Additional small delay to ensure client is fully ready
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
         fetchFormOptions();
       } catch (err) {
         console.error('Error initializing form options:', err);
+        // Retry with exponential backoff
+        if (attempt < 2) {
+          setTimeout(() => initializeAndFetch(attempt + 1), 2000 * (attempt + 1));
+        }
       }
     };
 
@@ -71,9 +88,9 @@ export default function InteractionsPage() {
       tableName: string
     ): Promise<T[] | null> => {
       try {
-        // Add timeout to prevent hanging queries
+        // Add timeout to prevent hanging queries (longer timeout for production)
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(`Query timeout for ${tableName}`)), 10000); // 10 second timeout
+          setTimeout(() => reject(new Error(`Query timeout for ${tableName}`)), 15000); // 15 second timeout
         });
         
         const queryPromise = queryFn();
@@ -320,8 +337,35 @@ export default function InteractionsPage() {
     }
   };
 
+  const handleRefresh = () => {
+    fetchFormOptions();
+    toast.info("Refreshing form options...");
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 relative">
+      {/* Refresh Button */}
+      <button
+        onClick={handleRefresh}
+        disabled={loadingOptions}
+        className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors shadow-lg"
+        title="Refresh form options"
+      >
+        <svg
+          className={`w-4 h-4 ${loadingOptions ? 'animate-spin' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        <span className="text-sm font-medium">Refresh</span>
+      </button>
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
           <div className="mb-6">
