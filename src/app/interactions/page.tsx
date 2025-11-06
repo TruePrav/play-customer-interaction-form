@@ -113,7 +113,9 @@ export default function InteractionsPage() {
         body: JSON.stringify(data),
       });
 
-      if (response.ok) {
+      const responseData = await response.json();
+
+      if (response.ok && responseData.success) {
         // Clear all form errors first
         form.clearErrors();
         
@@ -150,12 +152,32 @@ export default function InteractionsPage() {
           }
         }, 100);
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save");
+        // Handle error response
+        const errorMessage = responseData.error || "Failed to save interaction";
+        const errorDetails = responseData.details || responseData.hint || "";
+        const fullErrorMessage = errorDetails 
+          ? `${errorMessage}${errorDetails ? ` (${errorDetails})` : ""}`
+          : errorMessage;
+        
+        console.error("API error:", responseData);
+        toast.error(fullErrorMessage);
+        
+        // If it's a validation error, show field-specific errors
+        if (responseData.details && typeof responseData.details === 'object') {
+          Object.keys(responseData.details).forEach((field) => {
+            form.setError(field as any, {
+              type: "server",
+              message: responseData.details[field],
+            });
+          });
+        }
       }
     } catch (error) {
       console.error("Form submission error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to save. Please try again.");
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Failed to save. Please check your connection and try again.";
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
