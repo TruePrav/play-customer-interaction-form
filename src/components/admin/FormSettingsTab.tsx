@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ export default function FormSettingsTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const { loading: authLoading } = useAuth();
 
   const fetchOptions = async () => {
     try {
@@ -152,9 +154,12 @@ export default function FormSettingsTab() {
   };
 
   useEffect(() => {
-    fetchOptions();
+    // Wait for auth to finish loading before fetching data
+    if (!authLoading) {
+      fetchOptions();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, authLoading]);
 
   return (
     <div className="space-y-6">

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,7 +45,7 @@ export default function InteractionsTab() {
   const [filteredInteractions, setFilteredInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { signOut } = useAuth();
+  const { signOut, loading: authLoading } = useAuth();
   
   const [filters, setFilters] = useState<Filters>({
     startDate: "",
@@ -105,9 +106,12 @@ export default function InteractionsTab() {
   };
 
   useEffect(() => {
-    fetchInteractions();
-    fetchFormOptions();
-  }, []);
+    // Wait for auth to finish loading before fetching data
+    if (!authLoading) {
+      fetchInteractions();
+      fetchFormOptions();
+    }
+  }, [authLoading]);
 
   useEffect(() => {
     applyFilters();
