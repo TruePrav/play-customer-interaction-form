@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,13 +19,20 @@ export default function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const { error } = await signIn(email, password);
-    
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await signIn(email, password);
+      
+      if (error) {
+        setError(error.message);
+        // Clear password field on error for security
+        setPassword('');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setPassword('');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
@@ -91,6 +99,15 @@ export default function LoginForm() {
                 "Sign In"
               )}
             </Button>
+
+            <div className="text-center pt-2">
+              <Link 
+                href="/auth/forgot-password" 
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Forgot your password?
+              </Link>
+            </div>
           </form>
         </div>
       </div>

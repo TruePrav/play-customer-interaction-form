@@ -50,7 +50,18 @@ export async function POST(request: NextRequest) {
     });
 
     // Prepare the insert data - only include defined values
-    const insertData: Record<string, any> = {
+    const insertData: {
+      timestamp: string;
+      staff_name: string;
+      channel: string;
+      category: string;
+      wanted_item: string;
+      other_channel?: string;
+      branch?: string;
+      other_category?: string;
+      purchased?: boolean;
+      out_of_stock?: boolean;
+    } = {
       timestamp: payload.timestamp,
       staff_name: payload.staffName,
       channel: payload.channel,

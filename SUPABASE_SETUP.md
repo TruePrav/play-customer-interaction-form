@@ -28,7 +28,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
 1. In your Supabase dashboard, go to Authentication > Settings
 2. Enable Email authentication
 3. Configure your site URL (e.g., `http://localhost:3000` for development)
-4. Add redirect URLs for your domain
+4. Add redirect URLs for your domain:
+   - For development: `http://localhost:3000/auth/reset-password`
+   - For production: `https://yourdomain.com/auth/reset-password`
+   - Also add: `http://localhost:3000/**` (for development) and `https://yourdomain.com/**` (for production)
+5. Make sure "Enable email confirmations" is configured as needed for your use case
 
 ## 5. Create the Database Tables
 
@@ -81,13 +85,10 @@ CREATE POLICY "Allow admin read interactions" ON interactions
     )
   );
 
-CREATE POLICY "Allow admin read admin_users" ON admin_users
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM admin_users 
-      WHERE admin_users.email = auth.jwt() ->> 'email'
-    )
-  );
+-- Allow authenticated users to check if they are admin
+-- This policy allows any authenticated user to read admin_users to check their own admin status
+CREATE POLICY "Allow authenticated users to read admin_users" ON admin_users
+  FOR SELECT USING (auth.role() = 'authenticated');
 ```
 
 ## 6. Create Admin Users
@@ -116,3 +117,35 @@ Once you've set up the environment variables, created the tables, and added admi
 2. **Admin Dashboard**: Visit `/admin` - should require login
 3. **Login**: Use the admin credentials you created
 4. **Data**: Form submissions should save to Supabase and be visible in admin dashboard
+5. **Password Reset**: 
+   - Click "Forgot your password?" on the login page
+   - Enter your admin email address
+   - Check your email for the reset link
+   - Click the link to reset your password
+   - The link should redirect to `/auth/reset-password` (make sure this URL is in your Supabase redirect URLs)
+
+## 8. Password Reset Setup
+
+The application includes a password reset feature:
+
+1. **Forgot Password Page**: `/auth/forgot-password` - Users can request a password reset link
+2. **Reset Password Page**: `/auth/reset-password` - Users can set a new password after clicking the reset link
+
+**Important**: Make sure you've added the reset password URL to your Supabase redirect URLs (see step 4 above). The reset link from Supabase will redirect to this page.
+
+## 9. Set Up Form Options Tables (Optional but Recommended)
+
+To enable dynamic form options management in the admin panel, run the SQL migration file:
+
+1. Go to Supabase Dashboard → SQL Editor
+2. Copy and run the contents of `database_migration_form_options.sql` (located in the project root)
+3. This will create tables for managing:
+   - Staff members
+   - Channels
+   - Categories
+   - Branches
+
+After running this migration:
+- You can manage form options through the "Form Settings" tab in the admin panel
+- The customer interaction form will automatically use the options from the database
+- You can add, edit, reorder, and activate/deactivate options without code changes

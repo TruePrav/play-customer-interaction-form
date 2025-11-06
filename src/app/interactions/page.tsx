@@ -24,45 +24,79 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { interactionSchema, type InteractionFormSchema } from "@/lib/validation";
-import type { Channel, Branch, Category } from "@/types/interaction";
-
-const CHANNELS: Channel[] = [
-  "In-store",
-  "Phone",
-  "WhatsApp", 
-  "Instagram",
-  "Facebook",
-  "Email",
-  "Other"
-];
-
-const BRANCHES: Branch[] = ["Bridgetown", "Sheraton"];
-
-const CATEGORIES: Category[] = [
-  "Digital Cards",
-  "Consoles",
-  "Games", 
-  "Accessories",
-  "Repair/Service",
-  "Pokemon Cards",
-  "Electronics",
-  "Other"
-];
-
-const STAFF_MEMBERS = [
-  "Mohammed",
-  "Shelly", 
-  "Kemar",
-  "Dameon",
-  "Carson",
-  "Mahesh",
-  "Sunil",
-  "Praveen"
-];
+import { supabase } from "@/lib/supabase";
 
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [channels, setChannels] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [staffMembers, setStaffMembers] = useState<string[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const firstFieldRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchFormOptions();
+  }, []);
+
+  const fetchFormOptions = async () => {
+    try {
+      setLoadingOptions(true);
+      
+      // Fetch staff members
+      const { data: staffData } = await supabase
+        .from('staff_members')
+        .select('name')
+        .eq('active', true)
+        .order('display_order');
+      
+      if (staffData) {
+        setStaffMembers(staffData.map(s => s.name));
+      }
+
+      // Fetch channels
+      const { data: channelData } = await supabase
+        .from('channels')
+        .select('name')
+        .eq('active', true)
+        .order('display_order');
+      
+      if (channelData) {
+        setChannels(channelData.map(c => c.name));
+      }
+
+      // Fetch branches
+      const { data: branchData } = await supabase
+        .from('branches')
+        .select('name')
+        .eq('active', true)
+        .order('display_order');
+      
+      if (branchData) {
+        setBranches(branchData.map(b => b.name));
+      }
+
+      // Fetch categories
+      const { data: categoryData } = await supabase
+        .from('categories')
+        .select('name')
+        .eq('active', true)
+        .order('display_order');
+      
+      if (categoryData) {
+        setCategories(categoryData.map(c => c.name));
+      }
+    } catch (err) {
+      console.error('Error fetching form options:', err);
+      // Fallback to default values if database fetch fails
+      setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
+      setBranches(["Bridgetown", "Sheraton"]);
+      setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
+      setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+    } finally {
+      setLoadingOptions(false);
+    }
+  };
 
   const form = useForm<InteractionFormSchema>({
     resolver: zodResolver(interactionSchema),
@@ -85,13 +119,13 @@ export default function InteractionsPage() {
 
   // Autofocus the first field
   useEffect(() => {
-    if (firstFieldRef.current) {
+    if (firstFieldRef.current && !loadingOptions) {
       const firstRadio = firstFieldRef.current.querySelector('input[type="radio"]') as HTMLInputElement;
       if (firstRadio) {
         firstRadio.focus();
       }
     }
-  }, []);
+  }, [loadingOptions]);
 
   // Handle Enter key submission
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -165,7 +199,7 @@ export default function InteractionsPage() {
         // If it's a validation error, show field-specific errors
         if (responseData.details && typeof responseData.details === 'object') {
           Object.keys(responseData.details).forEach((field) => {
-            form.setError(field as any, {
+            form.setError(field as keyof InteractionFormSchema, {
               type: "server",
               message: responseData.details[field],
             });
@@ -224,7 +258,7 @@ export default function InteractionsPage() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {STAFF_MEMBERS.map((staff) => (
+                      {staffMembers.map((staff) => (
                         <SelectItem key={staff} value={staff}>
                           {staff}
                         </SelectItem>
@@ -250,7 +284,7 @@ export default function InteractionsPage() {
                         value={field.value}
                         className="grid grid-cols-3 gap-3"
                       >
-                      {CHANNELS.map((channel) => (
+                      {channels.map((channel) => (
                         <div key={channel} className="flex items-center space-x-2">
                           <RadioGroupItem
                             value={channel}
@@ -313,7 +347,7 @@ export default function InteractionsPage() {
                       </SelectTrigger>
                     </FormControl>
                       <SelectContent>
-                        {BRANCHES.map((branch) => (
+                        {branches.map((branch) => (
                           <SelectItem key={branch} value={branch}>
                             {branch}
                           </SelectItem>
@@ -340,7 +374,7 @@ export default function InteractionsPage() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {CATEGORIES.map((category) => (
+                      {categories.map((category) => (
                         <SelectItem key={category} value={category}>
                           {category}
                         </SelectItem>

@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, signOut } = useAuth();
 
   if (loading) {
     return (
@@ -26,6 +26,12 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!isAdmin) {
+    const handleSignOut = async () => {
+      await signOut();
+      // Force a page reload to reset state
+      window.location.reload();
+    };
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -44,15 +50,33 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
               </svg>
             </div>
             <h3 className="text-xl font-semibold text-gray-800 mb-2">Unauthorized Access</h3>
-            <p className="text-gray-600 mb-6">
-              You don&apos;t have admin privileges to access this page. Please contact your administrator.
+            <p className="text-gray-600 mb-4">
+              You don&apos;t have admin privileges to access this page.
             </p>
-            <button
-              onClick={() => window.location.href = '/interactions'}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
-            >
-              Go to Customer Form
-            </button>
+            {user?.email && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
+                <p className="text-sm text-yellow-800">
+                  <strong>Logged in as:</strong> {user.email}
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  This email is not in the admin_users table. Please contact your administrator to add this email to the admin_users table in Supabase.
+                </p>
+              </div>
+            )}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleSignOut}
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold"
+              >
+                Try Again with Different Account
+              </button>
+              <button
+                onClick={() => window.location.href = '/interactions'}
+                className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-300 transition-colors"
+              >
+                Go to Customer Form
+              </button>
+            </div>
           </div>
         </div>
       </div>
