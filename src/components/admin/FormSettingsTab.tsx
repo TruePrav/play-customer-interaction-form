@@ -30,20 +30,39 @@ export default function FormSettingsTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, sessionReady, session } = useAuth();
 
-  const fetchOptions = async () => {
+  const fetchOptions = async (retryCount = 0) => {
     try {
       setLoading(true);
       const table = OPTION_TYPES.find((t) => t.type === activeTab)?.table;
       if (!table) return;
+
+      // Ensure we have a session before querying
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Wait a bit and retry if no session yet
+        if (retryCount < 3) {
+          setTimeout(() => fetchOptions(retryCount + 1), 500);
+          return;
+        }
+        throw new Error('No active session. Please log in again.');
+      }
 
       const { data, error } = await supabase
         .from(table)
         .select("*")
         .order("display_order", { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        // Retry on auth errors
+        if ((error.message.includes('JWT') || error.message.includes('session')) && retryCount < 2) {
+          setTimeout(() => fetchOptions(retryCount + 1), 1000);
+          return;
+        }
+        throw error;
+      }
+      
       setOptions(data || []);
     } catch (err) {
       toast.error(`Failed to fetch ${activeTab}: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -154,12 +173,13 @@ export default function FormSettingsTab() {
   };
 
   useEffect(() => {
-    // Wait for auth to finish loading before fetching data
-    if (!authLoading) {
+    // Wait for auth to finish loading AND ensure session is ready
+    if (!authLoading && sessionReady && session) {
+      // Session is ready, fetch data
       fetchOptions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, authLoading]);
+  }, [activeTab, authLoading, sessionReady, session]);
 
   return (
     <div className="space-y-6">

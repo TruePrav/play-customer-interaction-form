@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  sessionReady: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   const checkAdminRole = async (user: User | null) => {
@@ -70,38 +72,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      checkAdminRole(session?.user ?? null);
-      setLoading(false);
-    });
+    let mounted = true;
+
+    // Get initial session - wait a bit for localStorage to be ready
+    const initializeAuth = async () => {
+      try {
+        // Small delay to ensure localStorage is accessible
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Error getting session:', error);
+        }
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        setSessionReady(true); // Mark session as ready
+        
+        if (session?.user) {
+          await checkAdminRole(session.user);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error('Error initializing auth:', err);
+        setSessionReady(true); // Still mark as ready even on error
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
       setSession(session);
       setUser(session?.user ?? null);
+      setSessionReady(true); // Session state has changed, mark as ready
       
       // Handle password recovery - don't check admin role during password reset
       if (event === 'PASSWORD_RECOVERY') {
         // User is in password recovery mode, allow them to reset password
         setIsAdmin(false);
+        setLoading(false);
       } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         // After password update or sign in, check admin role
         if (session?.user) {
           await checkAdminRole(session.user);
+        } else {
+          setIsAdmin(false);
         }
+        setLoading(false);
       } else {
-        checkAdminRole(session?.user ?? null);
+        // For other events, check admin role
+        if (session?.user) {
+          await checkAdminRole(session.user);
+        } else {
+          setIsAdmin(false);
+        }
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -141,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
+    sessionReady,
     signIn,
     signOut,
     resetPasswordForEmail,

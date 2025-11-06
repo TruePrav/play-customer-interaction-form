@@ -36,59 +36,115 @@ export default function InteractionsPage() {
   const firstFieldRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchFormOptions();
+    // Small delay to ensure Supabase client is initialized
+    const timer = setTimeout(() => {
+      fetchFormOptions();
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, []);
 
-  const fetchFormOptions = async () => {
+  const fetchFormOptions = async (retryCount = 0) => {
+    setLoadingOptions(true);
+    
+    let hasAnySuccess = false;
+    let hasNetworkError = false;
+
+    // Helper to fetch with retry logic for individual queries
+    const fetchWithRetry = async <T,>(
+      fetchFn: () => Promise<{ data: T[] | null; error: any }>,
+      retry: number = 0
+    ): Promise<T[] | null> => {
+      try {
+        const { data, error } = await fetchFn();
+        if (error) {
+          // Check if it's a network error that might be retryable
+          const isNetworkError = error.message?.includes('fetch') || 
+                                 error.message?.includes('network') ||
+                                 error.message?.includes('Failed to fetch') ||
+                                 error.message?.includes('timeout');
+          
+          if (isNetworkError && retry < 2) {
+            await new Promise(resolve => setTimeout(resolve, 500 * (retry + 1)));
+            return fetchWithRetry(fetchFn, retry + 1);
+          }
+          
+          console.error('Fetch error:', error);
+          hasNetworkError = hasNetworkError || isNetworkError;
+          return null;
+        }
+        
+        if (data && data.length > 0) {
+          hasAnySuccess = true;
+          return data;
+        }
+        return null;
+      } catch (err) {
+        console.error('Fetch exception:', err);
+        return null;
+      }
+    };
+
     try {
-      setLoadingOptions(true);
-      
-      // Fetch staff members
-      const { data: staffData } = await supabase
-        .from('staff_members')
-        .select('name')
-        .eq('active', true)
-        .order('display_order');
-      
-      if (staffData) {
-        setStaffMembers(staffData.map(s => s.name));
+      // Fetch all options in parallel - if one fails, others can still succeed
+      const [staffData, channelData, branchData, categoryData] = await Promise.all([
+        fetchWithRetry(() => supabase
+          .from('staff_members')
+          .select('name')
+          .eq('active', true)
+          .order('display_order')),
+        fetchWithRetry(() => supabase
+          .from('channels')
+          .select('name')
+          .eq('active', true)
+          .order('display_order')),
+        fetchWithRetry(() => supabase
+          .from('branches')
+          .select('name')
+          .eq('active', true)
+          .order('display_order')),
+        fetchWithRetry(() => supabase
+          .from('categories')
+          .select('name')
+          .eq('active', true)
+          .order('display_order')),
+      ]);
+
+      // Set data for each option (use fallback if fetch failed)
+      if (staffData && staffData.length > 0) {
+        setStaffMembers(staffData.map((s: { name: string }) => s.name));
+      } else {
+        setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
       }
 
-      // Fetch channels
-      const { data: channelData } = await supabase
-        .from('channels')
-        .select('name')
-        .eq('active', true)
-        .order('display_order');
-      
-      if (channelData) {
-        setChannels(channelData.map(c => c.name));
+      if (channelData && channelData.length > 0) {
+        setChannels(channelData.map((c: { name: string }) => c.name));
+      } else {
+        setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
       }
 
-      // Fetch branches
-      const { data: branchData } = await supabase
-        .from('branches')
-        .select('name')
-        .eq('active', true)
-        .order('display_order');
-      
-      if (branchData) {
-        setBranches(branchData.map(b => b.name));
+      if (branchData && branchData.length > 0) {
+        setBranches(branchData.map((b: { name: string }) => b.name));
+      } else {
+        setBranches(["Bridgetown", "Sheraton"]);
       }
 
-      // Fetch categories
-      const { data: categoryData } = await supabase
-        .from('categories')
-        .select('name')
-        .eq('active', true)
-        .order('display_order');
-      
-      if (categoryData) {
-        setCategories(categoryData.map(c => c.name));
+      if (categoryData && categoryData.length > 0) {
+        setCategories(categoryData.map((c: { name: string }) => c.name));
+      } else {
+        setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
       }
+
+      // If we had network errors and no success, retry the whole operation
+      if (hasNetworkError && !hasAnySuccess && retryCount < 2) {
+        console.log(`Retrying all fetchFormOptions (attempt ${retryCount + 1}/2)...`);
+        setTimeout(() => fetchFormOptions(retryCount + 1), 1000 * (retryCount + 1));
+        return;
+      }
+
     } catch (err) {
-      console.error('Error fetching form options:', err);
-      // Fallback to default values if database fetch fails
+      console.error('Unexpected error fetching form options:', err);
+      // Fallback to defaults
       setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
       setBranches(["Bridgetown", "Sheraton"]);
       setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);

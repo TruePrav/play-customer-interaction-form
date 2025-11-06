@@ -45,7 +45,7 @@ export default function InteractionsTab() {
   const [filteredInteractions, setFilteredInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { signOut, loading: authLoading } = useAuth();
+  const { signOut, loading: authLoading, sessionReady, session } = useAuth();
   
   const [filters, setFilters] = useState<Filters>({
     startDate: "",
@@ -106,12 +106,13 @@ export default function InteractionsTab() {
   };
 
   useEffect(() => {
-    // Wait for auth to finish loading before fetching data
-    if (!authLoading) {
+    // Wait for auth to finish loading AND ensure session is ready
+    if (!authLoading && sessionReady && session) {
+      // Session is ready, fetch data
       fetchInteractions();
       fetchFormOptions();
     }
-  }, [authLoading]);
+  }, [authLoading, sessionReady, session]);
 
   useEffect(() => {
     applyFilters();
@@ -168,15 +169,34 @@ export default function InteractionsTab() {
     }
   };
 
-  const fetchInteractions = async () => {
+  const fetchInteractions = async (retryCount = 0) => {
     try {
       setLoading(true);
+      setError(null);
+      
+      // Ensure we have a session before querying
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Wait a bit and retry if no session yet
+        if (retryCount < 3) {
+          setTimeout(() => fetchInteractions(retryCount + 1), 500);
+          return;
+        }
+        throw new Error('No active session. Please log in again.');
+      }
+
       const { data, error } = await supabase
         .from('interactions')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
+        // Retry on auth errors
+        if ((error.message.includes('JWT') || error.message.includes('session')) && retryCount < 2) {
+          console.log('Session error, retrying...', retryCount);
+          setTimeout(() => fetchInteractions(retryCount + 1), 1000);
+          return;
+        }
         throw error;
       }
 
