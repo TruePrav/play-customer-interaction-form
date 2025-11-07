@@ -40,52 +40,44 @@ export default function InteractionsPage() {
     let isMounted = true;
     let timeoutId: NodeJS.Timeout | null = null;
     
-    const initializeAndFetch = async (attempt = 0) => {
+    const initializeAndFetch = async () => {
       try {
-        // Progressive delay for production environments
-        // Production builds may need more time for client initialization
-        const delays = [200, 400, 600];
-        const delay = attempt < delays.length ? delays[attempt] : 500;
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
+        // Wait for client to be ready - production may need more time
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         if (!isMounted) return;
         
         // Verify Supabase client is configured
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
-          // Retry if URL not ready (might be a hydration issue)
-          if (attempt < 2 && isMounted) {
-            timeoutId = setTimeout(() => initializeAndFetch(attempt + 1), 1000);
-            return;
-          }
-          if (isMounted) {
-            console.error('Supabase not configured!');
-            setLoadingOptions(false);
-          }
+          console.error('⚠️ Supabase URL not configured!');
+          setLoadingOptions(false);
+          // Use fallbacks immediately
+          setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
+          setBranches(["Bridgetown", "Sheraton"]);
+          setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
+          setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
           return;
         }
         
-        // Additional small delay to ensure client is fully ready
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
         if (isMounted) {
-          // Set a maximum timeout - if still loading after 20 seconds, force stop and use fallbacks
+          // Set a maximum timeout - if still loading after 10 seconds, force stop and use fallbacks
           timeoutId = setTimeout(() => {
             if (isMounted) {
-              console.warn('Form options loading timeout after 20s - setting fallback values');
+              console.warn('⚠️ Form options loading timeout after 10s - using fallback values');
+              console.warn('Check browser Network tab for failed requests to Supabase');
               setLoadingOptions(false);
               setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
               setBranches(["Bridgetown", "Sheraton"]);
               setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
               setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
             }
-          }, 20000); // 20 second maximum timeout
+          }, 10000); // 10 second maximum timeout
           
           try {
             await fetchFormOptions();
           } finally {
-            // Always clear timeout when fetch completes (success or failure)
+            // Always clear timeout when fetch completes
             if (timeoutId) {
               clearTimeout(timeoutId);
               timeoutId = null;
@@ -129,80 +121,124 @@ export default function InteractionsPage() {
       retry: number = 0,
       tableName: string
     ): Promise<T[] | null> => {
+      const startTime = Date.now();
+      
       try {
-        // Add timeout to prevent hanging queries (longer timeout for production)
+        // Create timeout promise
+        let timeoutId: NodeJS.Timeout;
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(`Query timeout for ${tableName}`)), 15000); // 15 second timeout
+          timeoutId = setTimeout(() => {
+            reject(new Error(`Query timeout for ${tableName} after 6 seconds`));
+          }, 6000); // 6 second timeout per query
         });
         
+        // Start the query
         const queryPromise = queryFn();
-        const result = await Promise.race([queryPromise, timeoutPromise]);
+        
+        // Race between query and timeout
+        let result: { data: T[] | null; error: { message?: string } | null };
+        try {
+          result = await Promise.race([queryPromise, timeoutPromise]);
+          clearTimeout(timeoutId!);
+        } catch (raceError) {
+          clearTimeout(timeoutId!);
+          throw raceError;
+        }
+        
+        const elapsed = Date.now() - startTime;
         const { data, error } = result;
         
         if (error) {
-          // Check if it's a network error that might be retryable
-          const isNetworkError = Boolean(
+          console.error(`[${tableName}] Query error after ${elapsed}ms:`, {
+            message: error.message,
+            code: (error as any).code,
+            details: (error as any).details,
+            hint: (error as any).hint
+          });
+          
+          // Check if it's a network/RLS/auth error
+          const isRetryableError = Boolean(
             error.message?.includes('fetch') || 
             error.message?.includes('network') ||
             error.message?.includes('Failed to fetch') ||
-            error.message?.includes('timeout')
+            error.message?.includes('timeout') ||
+            error.message?.includes('JWT') ||
+            (error as any).code === 'PGRST301' || // RLS policy violation
+            (error as any).code === '42501' // Insufficient privilege
           );
           
-          if (isNetworkError && retry < 2) {
-            await new Promise(resolve => setTimeout(resolve, 500 * (retry + 1)));
+          if (isRetryableError && retry < 1) {
+            console.log(`[${tableName}] Retrying after error...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retry + 1)));
             return fetchWithRetry(queryFn, retry + 1, tableName);
           }
           
-          console.error(`Error fetching ${tableName}:`, error);
-          hasNetworkError = hasNetworkError || isNetworkError;
+          hasNetworkError = true;
           return null;
         }
+        
+        const dataLength = data?.length || 0;
+        console.log(`[${tableName}] Query completed in ${elapsed}ms, got ${dataLength} items`);
         
         if (data && data.length > 0) {
           hasAnySuccess = true;
           return data;
         }
         
+        console.warn(`[${tableName}] Query returned empty data`);
         return null;
       } catch (err) {
+        const elapsed = Date.now() - startTime;
         const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error(`[${tableName}] Exception after ${elapsed}ms:`, errorMessage);
         
-        // Check if it's a timeout error and retry
-        if (errorMessage.includes('timeout') && retry < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (retry + 1)));
-          return fetchWithRetry(queryFn, retry + 1, tableName);
-        }
-        
-        console.error(`Exception fetching ${tableName}:`, errorMessage);
+        // Don't retry timeout errors - they indicate a real problem
         hasNetworkError = true;
         return null;
       }
     };
 
     try {
+      console.log('Starting parallel queries at:', new Date().toISOString());
+      
       // Use Promise.allSettled instead of Promise.all to handle individual failures
-      const results = await Promise.allSettled([
-        fetchWithRetry(() => supabase
-          .from('staff_members')
-          .select('name')
-          .eq('active', true)
-          .order('display_order'), 0, 'staff_members'),
-        fetchWithRetry(() => supabase
-          .from('channels')
-          .select('name')
-          .eq('active', true)
-          .order('display_order'), 0, 'channels'),
-        fetchWithRetry(() => supabase
-          .from('branches')
-          .select('name')
-          .eq('active', true)
-          .order('display_order'), 0, 'branches'),
-        fetchWithRetry(() => supabase
-          .from('categories')
-          .select('name')
-          .eq('active', true)
-          .order('display_order'), 0, 'categories'),
-      ]);
+      const queryPromises = [
+        fetchWithRetry(() => {
+          console.log('[staff_members] Starting query...');
+          return supabase
+            .from('staff_members')
+            .select('name')
+            .eq('active', true)
+            .order('display_order');
+        }, 0, 'staff_members'),
+        fetchWithRetry(() => {
+          console.log('[channels] Starting query...');
+          return supabase
+            .from('channels')
+            .select('name')
+            .eq('active', true)
+            .order('display_order');
+        }, 0, 'channels'),
+        fetchWithRetry(() => {
+          console.log('[branches] Starting query...');
+          return supabase
+            .from('branches')
+            .select('name')
+            .eq('active', true)
+            .order('display_order');
+        }, 0, 'branches'),
+        fetchWithRetry(() => {
+          console.log('[categories] Starting query...');
+          return supabase
+            .from('categories')
+            .select('name')
+            .eq('active', true)
+            .order('display_order');
+        }, 0, 'categories'),
+      ];
+      
+      const results = await Promise.allSettled(queryPromises);
+      console.log('All queries settled at:', new Date().toISOString());
       
       // Extract data from settled promises
       const staffData = results[0].status === 'fulfilled' ? results[0].value : null;
