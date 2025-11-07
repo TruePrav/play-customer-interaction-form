@@ -75,7 +75,7 @@ export default function InteractionsPage() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const firstFieldRef = useRef<HTMLDivElement>(null);
   
-  // Load from localStorage on client side only (after mount)
+    // Load from localStorage on client side only (after mount)
   useEffect(() => {
     // Load cached data from localStorage on client
     const cachedChannels = loadFromStorage(STORAGE_KEYS.channels) || [];
@@ -85,7 +85,9 @@ export default function InteractionsPage() {
     
     if (cachedChannels.length > 0 || cachedBranches.length > 0 || 
         cachedCategories.length > 0 || cachedStaff.length > 0) {
-      console.log('✅ Loading cached form options from localStorage');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Loading cached form options from localStorage');
+      }
       setChannels(cachedChannels);
       setBranches(cachedBranches);
       setCategories(cachedCategories);
@@ -95,8 +97,11 @@ export default function InteractionsPage() {
   }, []); // Run once on mount
 
   useEffect(() => {
-    // Debug Supabase connection on mount
+    // Debug Supabase connection on mount (only in development)
     const debugSupabaseConnection = async () => {
+      if (process.env.NODE_ENV !== 'development') {
+        return; // Skip debug in production
+      }
       console.log('=== SUPABASE CONNECTION DEBUG ===');
       
       // Check environment variables
@@ -286,19 +291,23 @@ export default function InteractionsPage() {
     }
     
     try {
-      console.log('🔍 Checking for form option updates...');
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Checking for form option updates...');
+      }
       const checkStart = Date.now();
       
       // Use a timeout to prevent hanging - 10 seconds max
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          console.warn('⏱️ Update check timeout after 10 seconds');
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⏱️ Update check timeout after 10 seconds');
+          }
           reject(new Error('Update check timeout'));
         }, 10000);
       });
       
       // Fetch from database with timeout
-      console.log('📡 Fetching form options from database...');
       const fetchPromise = Promise.all([
         supabase.from('staff_members').select('name').eq('active', true).order('display_order'),
         supabase.from('channels').select('name').eq('active', true).order('display_order'),
@@ -308,45 +317,53 @@ export default function InteractionsPage() {
       
       const results = await Promise.race([fetchPromise, timeoutPromise]);
       const checkDuration = Date.now() - checkStart;
-      console.log(`✅ All queries completed in ${checkDuration}ms`);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ All queries completed in ${checkDuration}ms`);
+      }
       
       const [staffResult, channelResult, branchResult, categoryResult] = results as Awaited<typeof fetchPromise>;
       
-      // Debug each result
-      console.log('📊 Query Results:');
-      console.log('  staff_members:', {
-        hasData: !!staffResult.data,
-        dataLength: staffResult.data?.length || 0,
-        hasError: !!staffResult.error,
-        error: staffResult.error?.message || 'None',
-      });
-      console.log('  channels:', {
-        hasData: !!channelResult.data,
-        dataLength: channelResult.data?.length || 0,
-        hasError: !!channelResult.error,
-        error: channelResult.error?.message || 'None',
-      });
-      console.log('  branches:', {
-        hasData: !!branchResult.data,
-        dataLength: branchResult.data?.length || 0,
-        hasError: !!branchResult.error,
-        error: branchResult.error?.message || 'None',
-      });
-      console.log('  categories:', {
-        hasData: !!categoryResult.data,
-        dataLength: categoryResult.data?.length || 0,
-        hasError: !!categoryResult.error,
-        error: categoryResult.error?.message || 'None',
-      });
+      // Only log debug info in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📊 Query Results:');
+        console.log('  staff_members:', {
+          hasData: !!staffResult.data,
+          dataLength: staffResult.data?.length || 0,
+          hasError: !!staffResult.error,
+          error: staffResult.error?.message || 'None',
+        });
+        console.log('  channels:', {
+          hasData: !!channelResult.data,
+          dataLength: channelResult.data?.length || 0,
+          hasError: !!channelResult.error,
+          error: channelResult.error?.message || 'None',
+        });
+        console.log('  branches:', {
+          hasData: !!branchResult.data,
+          dataLength: branchResult.data?.length || 0,
+          hasError: !!branchResult.error,
+          error: branchResult.error?.message || 'None',
+        });
+        console.log('  categories:', {
+          hasData: !!categoryResult.data,
+          dataLength: categoryResult.data?.length || 0,
+          hasError: !!categoryResult.error,
+          error: categoryResult.error?.message || 'None',
+        });
+      }
       
       // Check if any queries failed
       if (staffResult.error || channelResult.error || branchResult.error || categoryResult.error) {
-        console.warn('Some queries failed during update check:', {
-          staff: staffResult.error?.message,
-          channels: channelResult.error?.message,
-          branches: branchResult.error?.message,
-          categories: categoryResult.error?.message,
-        });
+        // Only log errors in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Some queries failed during update check:', {
+            staff: staffResult.error?.message,
+            channels: channelResult.error?.message,
+            branches: branchResult.error?.message,
+            categories: categoryResult.error?.message,
+          });
+        }
         return false;
       }
       
@@ -364,7 +381,9 @@ export default function InteractionsPage() {
         JSON.stringify(categoryData) !== JSON.stringify(categories);
       
       if (hasChanged) {
-        console.log('Form options changed in database, updating...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Form options changed in database, updating...');
+        }
         // Update state and localStorage
         if (staffData.length > 0) {
           setStaffMembers(staffData);
@@ -384,9 +403,7 @@ export default function InteractionsPage() {
         }
         return true; // Data was updated
       } else {
-        if (!silent) {
-          console.log('Form options unchanged, using cached data');
-        }
+        // No changes - silently use cached data
         return false; // No changes
       }
     } catch (err) {
@@ -418,7 +435,10 @@ export default function InteractionsPage() {
       
       try {
         // Execute query with timeout to catch hanging queries
-        console.log(`[${tableName}] Executing query at ${new Date().toISOString()}...`);
+        // Only log in development to reduce console noise in production
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[${tableName}] Executing query at ${new Date().toISOString()}...`);
+        }
         
         // Create a timeout promise
         const timeoutMs = 15000; // 15 second timeout
@@ -434,32 +454,48 @@ export default function InteractionsPage() {
           result = await Promise.race([queryFn(), timeoutPromise]);
         } catch (timeoutErr) {
           const elapsed = Date.now() - startTime;
-          console.error(`[${tableName}] ⏱️ Query timed out after ${elapsed}ms`);
-          console.error(`[${tableName}] This suggests the query is hanging - check:`);
-          console.error(`  1. Network connectivity`);
-          console.error(`  2. Browser Network tab for pending requests`);
-          console.error(`  3. CORS settings in Supabase`);
-          console.error(`  4. RLS policies on ${tableName} table`);
+          // Only log timeout errors in development or if we don't have cached data
+          // In production with cached data, timeouts are expected and not critical
+          const hasCachedData = 
+            channels.length > 0 || 
+            branches.length > 0 || 
+            categories.length > 0 || 
+            staffMembers.length > 0;
+          
+          if (!hasCachedData || process.env.NODE_ENV === 'development') {
+            console.warn(`[${tableName}] ⏱️ Query timed out after ${elapsed}ms`);
+            console.warn(`[${tableName}] Using cached data. If issue persists, check:`);
+            console.warn(`  1. Network connectivity`);
+            console.warn(`  2. Browser Network tab for pending requests`);
+            console.warn(`  3. CORS settings in Supabase`);
+            console.warn(`  4. RLS policies on ${tableName} table`);
+          }
           throw timeoutErr;
         }
         
         const elapsed = Date.now() - startTime;
         const { data, error } = result;
-        console.log(`[${tableName}] ✅ Query completed in ${elapsed}ms, status:`, {
-          hasData: !!data,
-          dataLength: data?.length || 0,
-          hasError: !!error,
-          errorMessage: error?.message || 'None',
-        });
+        // Only log success in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[${tableName}] ✅ Query completed in ${elapsed}ms, status:`, {
+            hasData: !!data,
+            dataLength: data?.length || 0,
+            hasError: !!error,
+            errorMessage: error?.message || 'None',
+          });
+        }
         
         if (error) {
           const errorWithCode = error as { message?: string; code?: string; details?: string; hint?: string };
-          console.error(`[${tableName}] Query error after ${elapsed}ms:`, {
-            message: error.message,
-            code: errorWithCode.code,
-            details: errorWithCode.details,
-            hint: errorWithCode.hint
-          });
+          // Only log errors in development
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`[${tableName}] Query error after ${elapsed}ms:`, {
+              message: error.message,
+              code: errorWithCode.code,
+              details: errorWithCode.details,
+              hint: errorWithCode.hint
+            });
+          }
           
           // Check if it's a network/RLS/auth error
           const isRetryableError = Boolean(
@@ -490,18 +526,28 @@ export default function InteractionsPage() {
           return data;
         }
         
-        console.warn(`[${tableName}] Query returned empty data`);
+        // Only warn in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[${tableName}] Query returned empty data`);
+        }
         return null;
       } catch (err) {
         const elapsed = Date.now() - startTime;
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error(`[${tableName}] Exception after ${elapsed}ms:`, errorMessage);
         
-        // Log full error details for debugging
-        if (err instanceof Error) {
-          console.error(`[${tableName}] Error stack:`, err.stack);
+        // Only log detailed errors in development or if we don't have cached data
+        const hasCachedData = 
+          channels.length > 0 || 
+          branches.length > 0 || 
+          categories.length > 0 || 
+          staffMembers.length > 0;
+        
+        if (!hasCachedData || process.env.NODE_ENV === 'development') {
+          console.warn(`[${tableName}] Query failed after ${elapsed}ms:`, errorMessage);
+          if (err instanceof Error && err.stack) {
+            console.warn(`[${tableName}] Error stack:`, err.stack);
+          }
         }
-        console.error(`[${tableName}] Full error object:`, err);
         
         // Don't retry on timeout - indicates a connectivity issue
         hasNetworkError = true;
@@ -510,12 +556,17 @@ export default function InteractionsPage() {
     };
 
     try {
-      console.log('Starting sequential queries at:', new Date().toISOString());
+      // Only log in development to reduce console noise
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Starting sequential queries at:', new Date().toISOString());
+      }
       
       // Execute queries sequentially to avoid race conditions
       // This is slower but more reliable when the connection is intermittent
       const staffData = await fetchWithRetry(async () => {
-        console.log('[staff_members] Starting query...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[staff_members] Starting query...');
+        }
         return await supabase
           .from('staff_members')
           .select('name')
@@ -524,7 +575,9 @@ export default function InteractionsPage() {
       }, 0, 'staff_members');
       
       const channelData = await fetchWithRetry(async () => {
-        console.log('[channels] Starting query...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[channels] Starting query...');
+        }
         return await supabase
           .from('channels')
           .select('name')
@@ -533,7 +586,9 @@ export default function InteractionsPage() {
       }, 0, 'channels');
       
       const branchData = await fetchWithRetry(async () => {
-        console.log('[branches] Starting query...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[branches] Starting query...');
+        }
         return await supabase
           .from('branches')
           .select('name')
@@ -542,7 +597,9 @@ export default function InteractionsPage() {
       }, 0, 'branches');
       
       const categoryData = await fetchWithRetry(async () => {
-        console.log('[categories] Starting query...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[categories] Starting query...');
+        }
         return await supabase
           .from('categories')
           .select('name')
@@ -550,43 +607,45 @@ export default function InteractionsPage() {
           .order('display_order');
       }, 0, 'categories');
       
-      console.log('All queries completed at:', new Date().toISOString());
+      if (process.env.NODE_ENV === 'development') {
+        console.log('All queries completed at:', new Date().toISOString());
+      }
       
       // Update with database data - only set if we got results, and save to localStorage
       if (staffData && staffData.length > 0) {
         const staffNames = staffData.map((s: { name: string }) => s.name);
-        console.log(`[staff_members] Setting ${staffNames.length} items from database`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[staff_members] Setting ${staffNames.length} items from database`);
+        }
         setStaffMembers(staffNames);
         saveToStorage(STORAGE_KEYS.staff, staffNames);
-      } else {
-        console.warn(`[staff_members] No data received from database`);
       }
 
       if (channelData && channelData.length > 0) {
         const channelNames = channelData.map((c: { name: string }) => c.name);
-        console.log(`[channels] Setting ${channelNames.length} items from database`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[channels] Setting ${channelNames.length} items from database`);
+        }
         setChannels(channelNames);
         saveToStorage(STORAGE_KEYS.channels, channelNames);
-      } else {
-        console.warn(`[channels] No data received from database`);
       }
 
       if (branchData && branchData.length > 0) {
         const branchNames = branchData.map((b: { name: string }) => b.name);
-        console.log(`[branches] Setting ${branchNames.length} items from database`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[branches] Setting ${branchNames.length} items from database`);
+        }
         setBranches(branchNames);
         saveToStorage(STORAGE_KEYS.branches, branchNames);
-      } else {
-        console.warn(`[branches] No data received from database`);
       }
 
       if (categoryData && categoryData.length > 0) {
         const categoryNames = categoryData.map((c: { name: string }) => c.name);
-        console.log(`[categories] Setting ${categoryNames.length} items from database`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[categories] Setting ${categoryNames.length} items from database`);
+        }
         setCategories(categoryNames);
         saveToStorage(STORAGE_KEYS.categories, categoryNames);
-      } else {
-        console.warn(`[categories] No data received from database`);
       }
 
       // If we had network errors and no success, retry the whole operation
