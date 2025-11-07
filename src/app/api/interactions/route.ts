@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { interactionSchema } from "@/lib/validation";
 import type { InteractionPayload } from "@/types/interaction";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseClient, testConnection, getSupabaseConfig } from "@/lib/dbConnection";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,27 +27,39 @@ export async function POST(request: NextRequest) {
     };
 
     // Check if Supabase is configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const config = getSupabaseConfig();
     
-    if (!supabaseUrl || !supabaseKey || supabaseUrl === 'https://placeholder.supabase.co') {
-      console.warn("Supabase not configured - data not saved:", JSON.stringify(payload, null, 2));
+    if (!config.isConfigured) {
+      console.error("Supabase not configured - environment variables missing or invalid");
       return NextResponse.json(
         { 
           success: false, 
-          error: "Database not configured. Please set up Supabase environment variables." 
+          error: "Database not configured. Please set up Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY) in your .env.local file.",
+          details: "Check your Supabase Dashboard > Settings > API for the correct values."
         },
         { status: 500 }
       );
     }
 
     // Create a server-side Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+    const { client: supabase } = createSupabaseClient({
+      persistSession: false,
+      autoRefreshToken: false,
     });
+
+    // Test connection before attempting insert
+    const connectionTest = await testConnection('interactions');
+    if (!connectionTest.success) {
+      console.error("Database connection test failed:", connectionTest);
+      return NextResponse.json(
+        {
+          success: false,
+          error: connectionTest.message || "Database connection failed",
+          details: connectionTest.error,
+        },
+        { status: 500 }
+      );
+    }
 
     // Prepare the insert data - only include defined values
     const insertData: {

@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { interactionSchema, type InteractionFormSchema } from "@/lib/validation";
-import { supabase } from "@/lib/supabase";
+import { supabase, validateClientConfiguration, testConnection } from "@/lib/supabase";
 
 // LocalStorage keys for caching form options
 const STORAGE_KEYS = {
@@ -104,29 +104,23 @@ export default function InteractionsPage() {
       }
       console.log('=== SUPABASE CONNECTION DEBUG ===');
       
-      // Check environment variables
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      
-      console.log('📋 Environment Variables:');
-      console.log('  NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '❌ NOT SET');
-      console.log('  NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? `${supabaseKey.substring(0, 20)}...` : '❌ NOT SET');
-      
-      if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
-        console.error('❌ Supabase URL is not configured or is placeholder!');
-        return;
-      }
-      
-      if (!supabaseKey || supabaseKey === 'placeholder-key') {
-        console.error('❌ Supabase Anon Key is not configured or is placeholder!');
+      // Validate configuration using centralized function
+      const validation = validateClientConfiguration();
+      console.log('📋 Configuration Validation:');
+      if (validation.isValid) {
+        console.log('  ✅ Configuration is valid');
+      } else {
+        console.error('  ❌ Configuration issues found:');
+        validation.issues.forEach(issue => {
+          console.error(`    - ${issue}`);
+        });
+        console.error('  💡 Please check your .env.local file');
         return;
       }
       
       // Check Supabase client
       console.log('📦 Supabase Client:');
       console.log('  Client exists:', !!supabase);
-      // Note: Supabase client internal properties are not directly accessible
-      // We verify it's configured by checking environment variables above
       
       // Check session/authentication
       try {
@@ -139,57 +133,15 @@ export default function InteractionsPage() {
         console.error('  ❌ Error checking session:', err);
       }
       
-      // Test basic connectivity with a simple query (with timeout)
+      // Test database connectivity using centralized function
       console.log('🌐 Testing Database Connectivity:');
-      try {
-        const testStart = Date.now();
-        
-        // Add timeout to connectivity test
-        const testTimeout = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Connectivity test timeout after 10s')), 10000);
-        });
-        
-        const testQuery = supabase
-          .from('staff_members')
-          .select('id')
-          .limit(1);
-        
-        const { data, error, status, statusText } = await Promise.race([
-          testQuery,
-          testTimeout
-        ]) as Awaited<typeof testQuery>;
-        
-        const testDuration = Date.now() - testStart;
-        
-        console.log('  Query duration:', `${testDuration}ms`);
-        console.log('  HTTP status:', status, statusText);
-        console.log('  Has data:', !!data);
-        console.log('  Data length:', data?.length || 0);
-        console.log('  Error:', error || 'None');
-        
-        if (error) {
-          console.error('  ❌ Query failed:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-          });
-          console.error('  💡 Check RLS policies on staff_members table');
-        } else {
-          console.log('  ✅ Database connection successful!');
-        }
-      } catch (err) {
-        console.error('  ❌ Exception during connectivity test:', err);
-        if (err instanceof Error) {
-          console.error('  Error message:', err.message);
-          if (err.message.includes('timeout')) {
-            console.error('  ⚠️ Query is hanging - check Network tab in browser');
-            console.error('  💡 Possible causes:');
-            console.error('     - Network connectivity issue');
-            console.error('     - CORS blocking requests');
-            console.error('     - Supabase project paused (free tier)');
-            console.error('     - Firewall/proxy blocking requests');
-          }
+      const connectionTest = await testConnection('staff_members');
+      if (connectionTest.success) {
+        console.log('  ✅', connectionTest.message);
+      } else {
+        console.error('  ❌', connectionTest.message);
+        if (connectionTest.error) {
+          console.error('  Error code:', connectionTest.error);
         }
       }
       

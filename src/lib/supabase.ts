@@ -1,23 +1,25 @@
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseClient, validateClientConfiguration } from './dbConnection'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
-
-// Validate configuration
+// Validate configuration on client side
 if (typeof window !== 'undefined') {
-  if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
-    console.error('⚠️ NEXT_PUBLIC_SUPABASE_URL is not set or is placeholder');
-  }
-  if (!supabaseAnonKey || supabaseAnonKey === 'placeholder-key') {
-    console.error('⚠️ NEXT_PUBLIC_SUPABASE_ANON_KEY is not set or is placeholder');
+  const validation = validateClientConfiguration();
+  if (!validation.isValid) {
+    console.error('⚠️ Supabase Configuration Issues:');
+    validation.issues.forEach(issue => {
+      console.error(`  - ${issue}`);
+    });
+    console.error('\nPlease check your .env.local file and ensure:');
+    console.error('  1. NEXT_PUBLIC_SUPABASE_URL is set to your Supabase project URL');
+    console.error('  2. NEXT_PUBLIC_SUPABASE_ANON_KEY is set to your Supabase anon/public key');
+    console.error('  3. Both values are correct (you can find them in Supabase Dashboard > Settings > API)');
   }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  },
+// Create the client-side Supabase client
+const { client: supabase } = createSupabaseClient({
+  persistSession: true,
+  autoRefreshToken: true,
 })
+
+export { supabase }
+export { validateClientConfiguration, testConnection, getSupabaseConfig } from './dbConnection'

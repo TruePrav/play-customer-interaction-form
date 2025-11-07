@@ -86,6 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (error) {
           console.error('Error getting session:', error);
+          // Don't block on error - still mark as ready and set loading to false
+          setSessionReady(true);
+          setLoading(false);
+          return;
         }
         
         setSession(session);
@@ -106,6 +110,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     };
+
+    // Add a safety timeout - if auth initialization takes too long, stop loading
+    let timeoutFired = false;
+    const timeoutId = setTimeout(() => {
+      if (mounted && !timeoutFired) {
+        timeoutFired = true;
+        console.warn('Auth initialization timeout - forcing loading to false');
+        setLoading(false);
+        setSessionReady(true);
+      }
+    }, 10000); // 10 second timeout
 
     initializeAuth();
 
@@ -145,6 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);

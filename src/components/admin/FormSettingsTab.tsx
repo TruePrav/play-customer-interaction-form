@@ -174,9 +174,15 @@ export default function FormSettingsTab() {
 
   useEffect(() => {
     // Wait for auth to finish loading AND ensure session is ready
-    if (!authLoading && sessionReady && session) {
-      // Session is ready, fetch data
-      fetchOptions();
+    if (!authLoading && sessionReady) {
+      if (session) {
+        // Session is ready, fetch data
+        fetchOptions();
+      } else {
+        // No session - set loading to false and show error
+        setLoading(false);
+        toast.error('No active session. Please log in again.');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, authLoading, sessionReady, session]);

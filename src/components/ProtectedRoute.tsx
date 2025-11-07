@@ -10,6 +10,11 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, isAdmin, signOut } = useAuth();
 
+  // Debug logging
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('ProtectedRoute render:', { loading, hasUser: !!user, isAdmin });
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">

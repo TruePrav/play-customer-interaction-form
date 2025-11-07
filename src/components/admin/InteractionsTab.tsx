@@ -107,14 +107,20 @@ export default function InteractionsTab() {
 
   useEffect(() => {
     // Wait for auth to finish loading AND ensure session is ready
-    if (!authLoading && sessionReady && session) {
-      // Small delay to ensure everything is settled in production
-      const timer = setTimeout(() => {
-        fetchInteractions();
-        fetchFormOptions();
-      }, 200);
-      
-      return () => clearTimeout(timer);
+    if (!authLoading && sessionReady) {
+      if (session) {
+        // Small delay to ensure everything is settled in production
+        const timer = setTimeout(() => {
+          fetchInteractions();
+          fetchFormOptions();
+        }, 200);
+        
+        return () => clearTimeout(timer);
+      } else {
+        // No session - set error and stop loading
+        setError('No active session. Please log in again.');
+        setLoading(false);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, sessionReady, session]);
@@ -282,11 +288,12 @@ export default function InteractionsTab() {
     return category === "Other" && otherCategory ? otherCategory : category;
   };
 
-  if (loading) {
+  if (loading && !error) {
     return (
       <div className="text-center py-8">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
         <p className="text-gray-600">Loading interactions...</p>
+        {authLoading && <p className="text-sm text-gray-500 mt-2">Authenticating...</p>}
       </div>
     );
   }
