@@ -35,10 +35,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Normalize email for comparison
       const userEmail = user.email.toLowerCase().trim();
       
-      // Query all admin users and check if email matches (case-insensitive)
-      const { data, error } = await supabase
+      // First, ensure we have a valid session
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+      if (!currentSession) {
+        console.error('❌ No active session when checking admin role');
+        console.error('Session error:', sessionError);
+        console.error('User object:', user ? { email: user.email, id: user.id } : 'null');
+        setIsAdmin(false);
+        return;
+      }
+      
+      // Log session info in production for debugging
+      if (process.env.NODE_ENV === 'production') {
+        console.log('🔐 Session check:', {
+          hasSession: !!currentSession,
+          userEmail: currentSession.user?.email,
+          expiresAt: currentSession.expires_at,
+        });
+      }
+
+      // Query all admin users (RLS policy allows authenticated users to read)
+      // Then do case-insensitive comparison on the client side
+      const { data, error, count } = await supabase
         .from('admin_users')
-        .select('email');
+        .select('email', { count: 'exact' });
 
       if (error) {
         console.error('Admin check error:', error);
@@ -46,24 +66,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           message: error.message,
           details: error.details,
           hint: error.hint,
-          code: error.code
+          code: error.code,
+          status: (error as { status?: number }).status
         });
+        
+        // If RLS error, log helpful message
+        if (error.code === 'PGRST116' || error.message?.includes('RLS') || error.message?.includes('policy')) {
+          console.error('⚠️ RLS policy issue - make sure "Allow authenticated users to read admin_users" policy exists');
+        }
+        
         setIsAdmin(false);
         return;
       }
 
+      // Check if data was returned
+      if (!data) {
+        console.error('Admin check: No data returned from query (null)');
+        setIsAdmin(false);
+        return;
+      }
+
+      // Log what we got for debugging
+      console.log(`Admin check: Found ${data.length} admin users in database (query returned ${count ?? 'unknown'} total)`);
+      
       // Check if user's email (case-insensitive) exists in admin list
-      const isAdminUser = data?.some(
-        admin => admin.email?.toLowerCase().trim() === userEmail
-      ) ?? false;
+      let isAdminUser = false;
+      const emailComparisons: Array<{ adminEmail: string; matches: boolean }> = [];
+      
+      isAdminUser = data.some(
+        admin => {
+          const adminEmail = admin.email?.toLowerCase().trim() || '';
+          const matches = adminEmail === userEmail;
+          emailComparisons.push({ adminEmail, matches });
+          return matches;
+        }
+      );
+      
+      // Log comparisons in production for debugging, or always in development
+      if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'development') {
+        emailComparisons.forEach(({ adminEmail, matches }) => {
+          console.log(`  Comparing: "${adminEmail}" === "${userEmail}" ? ${matches}`);
+        });
+      }
 
       setIsAdmin(isAdminUser);
       
       if (isAdminUser) {
-        console.log('Admin check successful for:', userEmail);
+        console.log('✅ Admin check successful for:', userEmail);
       } else {
-        console.log('Admin check failed - email not found:', userEmail);
-        console.log('Available admin emails:', data?.map(a => a.email));
+        console.error('❌ Admin check failed - email not found in admin_users:', userEmail);
+        console.error('Available admin emails:', data.map(a => a.email));
+        console.error('Environment:', process.env.NODE_ENV);
+        console.error('Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+        console.error('User email from session:', user.email);
       }
     } catch (err) {
       console.error('Admin check exception:', err);
