@@ -26,30 +26,91 @@ import {
 import { interactionSchema, type InteractionFormSchema } from "@/lib/validation";
 import { supabase } from "@/lib/supabase";
 
-// Fallback data from CSV exports (used if queries timeout)
-const FALLBACK_CATEGORIES = ["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"];
-const FALLBACK_BRANCHES = ["Bridgetown", "Sheraton"];
-const FALLBACK_CHANNELS = ["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"];
-const FALLBACK_STAFF = ["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"];
+// LocalStorage keys for caching form options
+const STORAGE_KEYS = {
+  channels: 'form_options_channels',
+  branches: 'form_options_branches',
+  categories: 'form_options_categories',
+  staff: 'form_options_staff',
+  lastUpdated: 'form_options_last_updated', // Timestamp of last successful fetch
+} as const;
+
+// Helper functions for localStorage
+const saveToStorage = (key: string, data: string[]) => {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(data));
+      // Update timestamp when we save any data
+      localStorage.setItem(STORAGE_KEYS.lastUpdated, Date.now().toString());
+    }
+  } catch (error) {
+    console.warn(`Failed to save to localStorage (${key}):`, error);
+  }
+};
+
+const loadFromStorage = (key: string): string[] | null => {
+  try {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        return JSON.parse(stored) as string[];
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to load from localStorage (${key}):`, error);
+  }
+  return null;
+};
+
+const getLastUpdated = (): number | null => {
+  try {
+    if (typeof window !== 'undefined') {
+      const timestamp = localStorage.getItem(STORAGE_KEYS.lastUpdated);
+      return timestamp ? parseInt(timestamp, 10) : null;
+    }
+  } catch (error) {
+    console.warn('Failed to get last updated timestamp:', error);
+  }
+  return null;
+};
 
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [channels, setChannels] = useState<string[]>([]);
-  const [branches, setBranches] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [staffMembers, setStaffMembers] = useState<string[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(true);
+  
+  // Initialize state from localStorage if available
+  const initialChannels = loadFromStorage(STORAGE_KEYS.channels) || [];
+  const initialBranches = loadFromStorage(STORAGE_KEYS.branches) || [];
+  const initialCategories = loadFromStorage(STORAGE_KEYS.categories) || [];
+  const initialStaff = loadFromStorage(STORAGE_KEYS.staff) || [];
+  
+  // Check if we have any cached data
+  const hasCachedData = 
+    initialChannels.length > 0 || 
+    initialBranches.length > 0 || 
+    initialCategories.length > 0 || 
+    initialStaff.length > 0;
+  
+  const [channels, setChannels] = useState<string[]>(initialChannels);
+  const [branches, setBranches] = useState<string[]>(initialBranches);
+  const [categories, setCategories] = useState<string[]>(initialCategories);
+  const [staffMembers, setStaffMembers] = useState<string[]>(initialStaff);
+  const [loadingOptions, setLoadingOptions] = useState(!hasCachedData);
   const firstFieldRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Ensure Supabase client is ready before fetching
-    let isMounted = true;
-    let timeoutId: NodeJS.Timeout | null = null;
+    if (hasCachedData) {
+      console.log('Using cached form options from localStorage');
+    }
     
-    const initializeAndFetch = async () => {
+    // Fetch from database in background to update cache
+    let isMounted = true;
+    
+    const fetchFromDatabase = async (attempt = 0) => {
       try {
-        // Wait for client to be ready - production may need more time
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Progressive delay - production may need more time
+        const delays = [200, 500, 1000];
+        const delay = attempt < delays.length ? delays[attempt] : 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
         
         if (!isMounted) return;
         
@@ -57,63 +118,123 @@ export default function InteractionsPage() {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
           console.error('⚠️ Supabase URL not configured!');
-          setLoadingOptions(false);
-          // Use fallbacks immediately
-          setChannels(FALLBACK_CHANNELS);
-          setBranches(FALLBACK_BRANCHES);
-          setCategories(FALLBACK_CATEGORIES);
-          setStaffMembers(FALLBACK_STAFF);
+          if (!hasCachedData) {
+            setLoadingOptions(false);
+          }
           return;
         }
         
-        if (isMounted) {
-          // Set a maximum timeout - if still loading after 5 seconds, force stop and use fallbacks
-          timeoutId = setTimeout(() => {
-            if (isMounted) {
-              console.warn('⚠️ Form options loading timeout after 5s - using fallback values');
-              console.warn('Check browser Network tab for failed requests to Supabase');
-              setLoadingOptions(false);
-              setChannels(FALLBACK_CHANNELS);
-              setBranches(FALLBACK_BRANCHES);
-              setCategories(FALLBACK_CATEGORIES);
-              setStaffMembers(FALLBACK_STAFF);
-            }
-          }, 5000); // 5 second maximum timeout
-          
-          try {
-            await fetchFormOptions();
-          } finally {
-            // Always clear timeout when fetch completes
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-            }
+        // Verify Supabase client is available (it should always be, but check anyway)
+        if (!supabase) {
+          console.error('Supabase client not available');
+          if (attempt < 2) {
+            setTimeout(() => fetchFromDatabase(attempt + 1), delay);
+            return;
           }
+          if (!hasCachedData) {
+            setLoadingOptions(false);
+          }
+          return;
         }
+        
+        // Fetch from database (only show loading if we don't have cached data)
+        if (!hasCachedData) {
+          setLoadingOptions(true);
+        }
+        await fetchFormOptions();
       } catch (err) {
-        console.error('Error initializing form options:', err);
-        if (isMounted) {
+        console.error('Error fetching form options from database:', err);
+        // Retry once more if this was the first attempt
+        if (attempt < 1 && isMounted) {
+          console.log('Retrying fetch after error...');
+          setTimeout(() => fetchFromDatabase(attempt + 1), 1000);
+          return;
+        }
+        // Set loading to false on error after retries (only if we don't have cached data)
+        if (isMounted && !hasCachedData) {
           setLoadingOptions(false);
-          // Ensure fallback values are always set from CSV data
-          setChannels(FALLBACK_CHANNELS);
-          setBranches(FALLBACK_BRANCHES);
-          setCategories(FALLBACK_CATEGORIES);
-          setStaffMembers(FALLBACK_STAFF);
         }
       }
     };
 
-    initializeAndFetch();
+    fetchFromDatabase();
     
-    // Cleanup function
     return () => {
       isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Check if database has changed by comparing with cached data
+  const checkAndUpdateFormOptions = async (silent = false): Promise<boolean> => {
+    // If silent mode, don't show loading state unless data actually changed
+    if (!silent) {
+      setLoadingOptions(true);
+    }
+    
+    try {
+      // Fetch from database
+      const results = await Promise.all([
+        supabase.from('staff_members').select('name').eq('active', true).order('display_order'),
+        supabase.from('channels').select('name').eq('active', true).order('display_order'),
+        supabase.from('branches').select('name').eq('active', true).order('display_order'),
+        supabase.from('categories').select('name').eq('active', true).order('display_order'),
+      ]);
+      
+      const [staffResult, channelResult, branchResult, categoryResult] = results;
+      
+      // Check if any queries failed
+      if (staffResult.error || channelResult.error || branchResult.error || categoryResult.error) {
+        console.warn('Some queries failed, skipping update check');
+        return false;
+      }
+      
+      // Extract data
+      const staffData = staffResult.data?.map(s => s.name) || [];
+      const channelData = channelResult.data?.map(c => c.name) || [];
+      const branchData = branchResult.data?.map(b => b.name) || [];
+      const categoryData = categoryResult.data?.map(c => c.name) || [];
+      
+      // Check if data has changed by comparing with current state
+      const hasChanged = 
+        JSON.stringify(staffData) !== JSON.stringify(staffMembers) ||
+        JSON.stringify(channelData) !== JSON.stringify(channels) ||
+        JSON.stringify(branchData) !== JSON.stringify(branches) ||
+        JSON.stringify(categoryData) !== JSON.stringify(categories);
+      
+      if (hasChanged) {
+        console.log('Form options changed in database, updating...');
+        // Update state and localStorage
+        if (staffData.length > 0) {
+          setStaffMembers(staffData);
+          saveToStorage(STORAGE_KEYS.staff, staffData);
+        }
+        if (channelData.length > 0) {
+          setChannels(channelData);
+          saveToStorage(STORAGE_KEYS.channels, channelData);
+        }
+        if (branchData.length > 0) {
+          setBranches(branchData);
+          saveToStorage(STORAGE_KEYS.branches, branchData);
+        }
+        if (categoryData.length > 0) {
+          setCategories(categoryData);
+          saveToStorage(STORAGE_KEYS.categories, categoryData);
+        }
+        return true; // Data was updated
+      } else {
+        console.log('Form options unchanged, using cached data');
+        return false; // No changes
+      }
+    } catch (err) {
+      console.error('Error checking form options:', err);
+      return false;
+    } finally {
+      if (!silent) {
+        setLoadingOptions(false);
+      }
+    }
+  };
 
   const fetchFormOptions = async (retryCount = 0) => {
     setLoadingOptions(true);
@@ -123,35 +244,19 @@ export default function InteractionsPage() {
 
     // Helper to fetch with retry logic for individual queries
     const fetchWithRetry = async <T extends { name: string }>(
-      queryFn: () => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+      queryFn: () => Promise<{ data: T[] | null; error: { message?: string } | null }>,
       retry: number = 0,
       tableName: string
     ): Promise<T[] | null> => {
       const startTime = Date.now();
       
       try {
-        // Create timeout promise
-        let timeoutId: NodeJS.Timeout;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error(`Query timeout for ${tableName} after 5 seconds`));
-          }, 5000); // 5 second timeout per query
-        });
-        
-        // Start the query
-        const queryPromise = queryFn();
-        
-        // Race between query and timeout
-        let result: { data: T[] | null; error: { message?: string } | null };
-        try {
-          result = await Promise.race([queryPromise, timeoutPromise]);
-          clearTimeout(timeoutId!);
-        } catch (raceError) {
-          clearTimeout(timeoutId!);
-          throw raceError;
-        }
-        
+        // Execute query directly - let Supabase handle its own timeouts
+        // Don't wrap in Promise.race as it might interfere with Supabase's internal handling
+        console.log(`[${tableName}] Executing query...`);
+        const result = await queryFn();
         const elapsed = Date.now() - startTime;
+        
         const { data, error } = result;
         
         if (error) {
@@ -199,90 +304,96 @@ export default function InteractionsPage() {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error(`[${tableName}] Exception after ${elapsed}ms:`, errorMessage);
         
-        // Don't retry timeout errors - they indicate a real problem
+        // Log full error details for debugging
+        if (err instanceof Error) {
+          console.error(`[${tableName}] Error stack:`, err.stack);
+        }
+        console.error(`[${tableName}] Full error object:`, err);
+        
+        // Don't retry on timeout - indicates a connectivity issue
         hasNetworkError = true;
         return null;
       }
     };
 
     try {
-      console.log('Starting parallel queries at:', new Date().toISOString());
+      console.log('Starting sequential queries at:', new Date().toISOString());
       
-      // Use Promise.allSettled instead of Promise.all to handle individual failures
-      const queryPromises = [
-        fetchWithRetry(() => {
-          console.log('[staff_members] Starting query...');
-          return supabase
-            .from('staff_members')
-            .select('name')
-            .eq('active', true)
-            .order('display_order');
-        }, 0, 'staff_members'),
-        fetchWithRetry(() => {
-          console.log('[channels] Starting query...');
-          return supabase
-            .from('channels')
-            .select('name')
-            .eq('active', true)
-            .order('display_order');
-        }, 0, 'channels'),
-        fetchWithRetry(() => {
-          console.log('[branches] Starting query...');
-          return supabase
-            .from('branches')
-            .select('name')
-            .eq('active', true)
-            .order('display_order');
-        }, 0, 'branches'),
-        fetchWithRetry(() => {
-          console.log('[categories] Starting query...');
-          return supabase
-            .from('categories')
-            .select('name')
-            .eq('active', true)
-            .order('display_order');
-        }, 0, 'categories'),
-      ];
+      // Execute queries sequentially to avoid race conditions
+      // This is slower but more reliable when the connection is intermittent
+      console.log('[staff_members] Starting query...');
+      const staffData = await fetchWithRetry(async () => {
+        return await supabase
+          .from('staff_members')
+          .select('name')
+          .eq('active', true)
+          .order('display_order');
+      }, 0, 'staff_members');
       
-      const results = await Promise.allSettled(queryPromises);
-      console.log('All queries settled at:', new Date().toISOString());
+      console.log('[channels] Starting query...');
+      const channelData = await fetchWithRetry(async () => {
+        return await supabase
+          .from('channels')
+          .select('name')
+          .eq('active', true)
+          .order('display_order');
+      }, 0, 'channels');
       
-      // Extract data from settled promises
-      const staffData = results[0].status === 'fulfilled' ? results[0].value : null;
-      const channelData = results[1].status === 'fulfilled' ? results[1].value : null;
-      const branchData = results[2].status === 'fulfilled' ? results[2].value : null;
-      const categoryData = results[3].status === 'fulfilled' ? results[3].value : null;
+      console.log('[branches] Starting query...');
+      const branchData = await fetchWithRetry(async () => {
+        return await supabase
+          .from('branches')
+          .select('name')
+          .eq('active', true)
+          .order('display_order');
+      }, 0, 'branches');
       
-      // Log any rejected promises
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          console.error(`Query ${index} rejected:`, result.reason);
-        }
-      });
-
-      // Set data for each option (use fallback if fetch failed)
+      console.log('[categories] Starting query...');
+      const categoryData = await fetchWithRetry(async () => {
+        return await supabase
+          .from('categories')
+          .select('name')
+          .eq('active', true)
+          .order('display_order');
+      }, 0, 'categories');
+      
+      console.log('All queries completed at:', new Date().toISOString());
+      
+      // Update with database data - only set if we got results, and save to localStorage
       if (staffData && staffData.length > 0) {
-        setStaffMembers(staffData.map((s: { name: string }) => s.name));
+        const staffNames = staffData.map((s: { name: string }) => s.name);
+        console.log(`[staff_members] Setting ${staffNames.length} items from database`);
+        setStaffMembers(staffNames);
+        saveToStorage(STORAGE_KEYS.staff, staffNames);
       } else {
-        setStaffMembers(FALLBACK_STAFF);
+        console.warn(`[staff_members] No data received from database`);
       }
 
       if (channelData && channelData.length > 0) {
-        setChannels(channelData.map((c: { name: string }) => c.name));
+        const channelNames = channelData.map((c: { name: string }) => c.name);
+        console.log(`[channels] Setting ${channelNames.length} items from database`);
+        setChannels(channelNames);
+        saveToStorage(STORAGE_KEYS.channels, channelNames);
       } else {
-        setChannels(FALLBACK_CHANNELS);
+        console.warn(`[channels] No data received from database`);
       }
 
       if (branchData && branchData.length > 0) {
-        setBranches(branchData.map((b: { name: string }) => b.name));
+        const branchNames = branchData.map((b: { name: string }) => b.name);
+        console.log(`[branches] Setting ${branchNames.length} items from database`);
+        setBranches(branchNames);
+        saveToStorage(STORAGE_KEYS.branches, branchNames);
       } else {
-        setBranches(FALLBACK_BRANCHES);
+        console.warn(`[branches] No data received from database`);
       }
 
       if (categoryData && categoryData.length > 0) {
-        setCategories(categoryData.map((c: { name: string }) => c.name));
+        const categoryNames = categoryData.map((c: { name: string }) => c.name);
+        console.log(`[categories] Setting ${categoryNames.length} items from database`);
+        setCategories(categoryNames);
+        saveToStorage(STORAGE_KEYS.categories, categoryNames);
       } else {
-        setCategories(FALLBACK_CATEGORIES);
+        console.warn(`[categories] No data received from database`);
       }
 
       // If we had network errors and no success, retry the whole operation
@@ -300,11 +411,7 @@ export default function InteractionsPage() {
 
     } catch (err) {
       console.error('Unexpected error fetching form options:', err);
-      // Fallback to defaults from CSV
-      setChannels(FALLBACK_CHANNELS);
-      setBranches(FALLBACK_BRANCHES);
-      setCategories(FALLBACK_CATEGORIES);
-      setStaffMembers(FALLBACK_STAFF);
+      // Don't set any data on error - leave arrays empty
       setLoadingOptions(false);
     }
   };
@@ -312,11 +419,11 @@ export default function InteractionsPage() {
   const form = useForm<InteractionFormSchema>({
     resolver: zodResolver(interactionSchema),
     defaultValues: {
-      staffName: undefined,
-      channel: undefined,
+      staffName: "",
+      channel: "",
       otherChannel: "",
-      branch: undefined,
-      category: undefined,
+      branch: "",
+      category: "",
       otherCategory: "",
       purchased: undefined,
       outOfStock: undefined,
@@ -346,6 +453,29 @@ export default function InteractionsPage() {
     }
   };
 
+  const resetForm = () => {
+    form.reset({
+      staffName: "",
+      channel: "",
+      otherChannel: "",
+      branch: "",
+      category: "",
+      otherCategory: "",
+      purchased: undefined,
+      outOfStock: undefined,
+      wantedItem: "",
+    });
+    // Re-focus first field after reset
+    setTimeout(() => {
+      if (firstFieldRef.current) {
+        const firstRadio = firstFieldRef.current.querySelector('input[type="radio"]') as HTMLInputElement;
+        if (firstRadio) {
+          firstRadio.focus();
+        }
+      }
+    }, 100);
+  };
+
   const onSubmit = async (data: InteractionFormSchema) => {
     setIsSubmitting(true);
     
@@ -361,41 +491,17 @@ export default function InteractionsPage() {
       const responseData = await response.json();
 
       if (response.ok && responseData.success) {
-        // Clear all form errors first
-        form.clearErrors();
-        
-        // Reset form to default values - use empty strings for all fields
-        form.reset({
-          staffName: "",
-          channel: "",
-          otherChannel: "",
-          branch: "",
-          category: "",
-          otherCategory: "",
-          purchased: undefined,
-          outOfStock: undefined,
-          wantedItem: "",
-        });
-        
-        // Force form to re-render and clear validation state
-        setTimeout(() => {
-          form.clearErrors();
-          // Force a re-render by setting values again
-          form.setValue("staffName", "");
-          form.setValue("channel", "");
-          form.setValue("branch", "");
-          form.setValue("category", "");
-        }, 50);
-        
         toast.success("Interaction saved successfully!");
         
-        // Auto-focus the staff name dropdown for the next interaction
-        setTimeout(() => {
-          const staffSelect = document.querySelector('[data-name="staffName"] button') as HTMLButtonElement;
-          if (staffSelect) {
-            staffSelect.focus();
-          }
-        }, 100);
+        // Reset form after successful submission
+        resetForm();
+        
+        // Silently check if form options have changed in the database
+        // This runs in background without showing loading state
+        // Only updates if data has actually changed, otherwise uses cached localStorage
+        checkAndUpdateFormOptions(true).catch(err => {
+          console.error('Error checking for form option updates:', err);
+        });
       } else {
         // Handle error response
         const errorMessage = responseData.error || "Failed to save interaction";
