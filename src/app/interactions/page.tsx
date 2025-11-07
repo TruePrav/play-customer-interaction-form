@@ -37,41 +37,83 @@ export default function InteractionsPage() {
 
   useEffect(() => {
     // Ensure Supabase client is ready before fetching
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     const initializeAndFetch = async (attempt = 0) => {
       try {
         // Progressive delay for production environments
         // Production builds may need more time for client initialization
-        const delays = [300, 500, 800, 1000];
-        const delay = attempt < delays.length ? delays[attempt] : 1000;
+        const delays = [200, 400, 600];
+        const delay = attempt < delays.length ? delays[attempt] : 500;
         
         await new Promise(resolve => setTimeout(resolve, delay));
+        
+        if (!isMounted) return;
         
         // Verify Supabase client is configured
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
           // Retry if URL not ready (might be a hydration issue)
-          if (attempt < 3) {
-            setTimeout(() => initializeAndFetch(attempt + 1), 1000);
+          if (attempt < 2 && isMounted) {
+            timeoutId = setTimeout(() => initializeAndFetch(attempt + 1), 1000);
             return;
           }
-          console.error('Supabase not configured!');
+          if (isMounted) {
+            console.error('Supabase not configured!');
+            setLoadingOptions(false);
+          }
           return;
         }
         
         // Additional small delay to ensure client is fully ready
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        fetchFormOptions();
+        if (isMounted) {
+          // Set a maximum timeout - if still loading after 20 seconds, force stop and use fallbacks
+          timeoutId = setTimeout(() => {
+            if (isMounted) {
+              console.warn('Form options loading timeout after 20s - setting fallback values');
+              setLoadingOptions(false);
+              setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
+              setBranches(["Bridgetown", "Sheraton"]);
+              setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
+              setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+            }
+          }, 20000); // 20 second maximum timeout
+          
+          try {
+            await fetchFormOptions();
+          } finally {
+            // Always clear timeout when fetch completes (success or failure)
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+          }
+        }
       } catch (err) {
         console.error('Error initializing form options:', err);
-        // Retry with exponential backoff
-        if (attempt < 2) {
-          setTimeout(() => initializeAndFetch(attempt + 1), 2000 * (attempt + 1));
+        if (isMounted) {
+          setLoadingOptions(false);
+          // Ensure fallback values are always set
+          setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
+          setBranches(["Bridgetown", "Sheraton"]);
+          setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
+          setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
         }
       }
     };
 
     initializeAndFetch();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -202,9 +244,16 @@ export default function InteractionsPage() {
 
       // If we had network errors and no success, retry the whole operation
       if (hasNetworkError && !hasAnySuccess && retryCount < 2) {
-        setTimeout(() => fetchFormOptions(retryCount + 1), 1000 * (retryCount + 1));
+        // Reset loading state before scheduling retry
+        setLoadingOptions(false);
+        setTimeout(() => {
+          fetchFormOptions(retryCount + 1);
+        }, 1000 * (retryCount + 1));
         return;
       }
+
+      // Success or max retries reached - always set loading to false
+      setLoadingOptions(false);
 
     } catch (err) {
       console.error('Unexpected error fetching form options:', err);
@@ -213,7 +262,6 @@ export default function InteractionsPage() {
       setBranches(["Bridgetown", "Sheraton"]);
       setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
       setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
-    } finally {
       setLoadingOptions(false);
     }
   };
@@ -338,17 +386,22 @@ export default function InteractionsPage() {
   };
 
   const handleRefresh = () => {
-    fetchFormOptions();
+    // Force refresh - always allow user to retry, even if loading
     toast.info("Refreshing form options...");
+    // Always reset loading state first, then fetch with fresh retry count
+    setLoadingOptions(false);
+    // Small delay to ensure state update, then fetch
+    setTimeout(() => {
+      fetchFormOptions(0);
+    }, 50);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 relative">
-      {/* Refresh Button */}
+      {/* Refresh Button - Always enabled so user can force refresh */}
       <button
         onClick={handleRefresh}
-        disabled={loadingOptions}
-        className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors shadow-lg"
+        className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-lg"
         title="Refresh form options"
       >
         <svg
@@ -364,7 +417,7 @@ export default function InteractionsPage() {
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        <span className="text-sm font-medium">Refresh</span>
+        <span className="text-sm font-medium">{loadingOptions ? 'Refreshing...' : 'Refresh'}</span>
       </button>
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
