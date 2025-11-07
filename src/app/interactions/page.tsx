@@ -26,6 +26,12 @@ import {
 import { interactionSchema, type InteractionFormSchema } from "@/lib/validation";
 import { supabase } from "@/lib/supabase";
 
+// Fallback data from CSV exports (used if queries timeout)
+const FALLBACK_CATEGORIES = ["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"];
+const FALLBACK_BRANCHES = ["Bridgetown", "Sheraton"];
+const FALLBACK_CHANNELS = ["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"];
+const FALLBACK_STAFF = ["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"];
+
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [channels, setChannels] = useState<string[]>([]);
@@ -53,26 +59,26 @@ export default function InteractionsPage() {
           console.error('⚠️ Supabase URL not configured!');
           setLoadingOptions(false);
           // Use fallbacks immediately
-          setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
-          setBranches(["Bridgetown", "Sheraton"]);
-          setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
-          setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+          setChannels(FALLBACK_CHANNELS);
+          setBranches(FALLBACK_BRANCHES);
+          setCategories(FALLBACK_CATEGORIES);
+          setStaffMembers(FALLBACK_STAFF);
           return;
         }
         
         if (isMounted) {
-          // Set a maximum timeout - if still loading after 10 seconds, force stop and use fallbacks
+          // Set a maximum timeout - if still loading after 5 seconds, force stop and use fallbacks
           timeoutId = setTimeout(() => {
             if (isMounted) {
-              console.warn('⚠️ Form options loading timeout after 10s - using fallback values');
+              console.warn('⚠️ Form options loading timeout after 5s - using fallback values');
               console.warn('Check browser Network tab for failed requests to Supabase');
               setLoadingOptions(false);
-              setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
-              setBranches(["Bridgetown", "Sheraton"]);
-              setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
-              setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+              setChannels(FALLBACK_CHANNELS);
+              setBranches(FALLBACK_BRANCHES);
+              setCategories(FALLBACK_CATEGORIES);
+              setStaffMembers(FALLBACK_STAFF);
             }
-          }, 10000); // 10 second maximum timeout
+          }, 5000); // 5 second maximum timeout
           
           try {
             await fetchFormOptions();
@@ -88,11 +94,11 @@ export default function InteractionsPage() {
         console.error('Error initializing form options:', err);
         if (isMounted) {
           setLoadingOptions(false);
-          // Ensure fallback values are always set
-          setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
-          setBranches(["Bridgetown", "Sheraton"]);
-          setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
-          setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+          // Ensure fallback values are always set from CSV data
+          setChannels(FALLBACK_CHANNELS);
+          setBranches(FALLBACK_BRANCHES);
+          setCategories(FALLBACK_CATEGORIES);
+          setStaffMembers(FALLBACK_STAFF);
         }
       }
     };
@@ -128,8 +134,8 @@ export default function InteractionsPage() {
         let timeoutId: NodeJS.Timeout;
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
-            reject(new Error(`Query timeout for ${tableName} after 6 seconds`));
-          }, 6000); // 6 second timeout per query
+            reject(new Error(`Query timeout for ${tableName} after 5 seconds`));
+          }, 5000); // 5 second timeout per query
         });
         
         // Start the query
@@ -258,25 +264,25 @@ export default function InteractionsPage() {
       if (staffData && staffData.length > 0) {
         setStaffMembers(staffData.map((s: { name: string }) => s.name));
       } else {
-        setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+        setStaffMembers(FALLBACK_STAFF);
       }
 
       if (channelData && channelData.length > 0) {
         setChannels(channelData.map((c: { name: string }) => c.name));
       } else {
-        setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
+        setChannels(FALLBACK_CHANNELS);
       }
 
       if (branchData && branchData.length > 0) {
         setBranches(branchData.map((b: { name: string }) => b.name));
       } else {
-        setBranches(["Bridgetown", "Sheraton"]);
+        setBranches(FALLBACK_BRANCHES);
       }
 
       if (categoryData && categoryData.length > 0) {
         setCategories(categoryData.map((c: { name: string }) => c.name));
       } else {
-        setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
+        setCategories(FALLBACK_CATEGORIES);
       }
 
       // If we had network errors and no success, retry the whole operation
@@ -294,11 +300,11 @@ export default function InteractionsPage() {
 
     } catch (err) {
       console.error('Unexpected error fetching form options:', err);
-      // Fallback to defaults
-      setChannels(["In-store", "Phone", "WhatsApp", "Instagram", "Facebook", "Email", "Other"]);
-      setBranches(["Bridgetown", "Sheraton"]);
-      setCategories(["Digital Cards", "Consoles", "Games", "Accessories", "Repair/Service", "Pokemon Cards", "Electronics", "Other"]);
-      setStaffMembers(["Mohammed", "Shelly", "Kemar", "Dameon", "Carson", "Mahesh", "Sunil", "Praveen"]);
+      // Fallback to defaults from CSV
+      setChannels(FALLBACK_CHANNELS);
+      setBranches(FALLBACK_BRANCHES);
+      setCategories(FALLBACK_CATEGORIES);
+      setStaffMembers(FALLBACK_STAFF);
       setLoadingOptions(false);
     }
   };
