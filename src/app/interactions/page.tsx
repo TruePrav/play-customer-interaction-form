@@ -77,30 +77,136 @@ const getLastUpdated = (): number | null => {
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Initialize state from localStorage if available
-  const initialChannels = loadFromStorage(STORAGE_KEYS.channels) || [];
-  const initialBranches = loadFromStorage(STORAGE_KEYS.branches) || [];
-  const initialCategories = loadFromStorage(STORAGE_KEYS.categories) || [];
-  const initialStaff = loadFromStorage(STORAGE_KEYS.staff) || [];
-  
-  // Check if we have any cached data
-  const hasCachedData = 
-    initialChannels.length > 0 || 
-    initialBranches.length > 0 || 
-    initialCategories.length > 0 || 
-    initialStaff.length > 0;
-  
-  const [channels, setChannels] = useState<string[]>(initialChannels);
-  const [branches, setBranches] = useState<string[]>(initialBranches);
-  const [categories, setCategories] = useState<string[]>(initialCategories);
-  const [staffMembers, setStaffMembers] = useState<string[]>(initialStaff);
-  const [loadingOptions, setLoadingOptions] = useState(!hasCachedData);
+  // Initialize state - start with empty arrays to avoid hydration mismatch
+  // localStorage is only available on client, so we'll load from cache in useEffect
+  const [channels, setChannels] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [staffMembers, setStaffMembers] = useState<string[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const firstFieldRef = useRef<HTMLDivElement>(null);
+  
+  // Load from localStorage on client side only (after mount)
+  useEffect(() => {
+    // Load cached data from localStorage on client
+    const cachedChannels = loadFromStorage(STORAGE_KEYS.channels) || [];
+    const cachedBranches = loadFromStorage(STORAGE_KEYS.branches) || [];
+    const cachedCategories = loadFromStorage(STORAGE_KEYS.categories) || [];
+    const cachedStaff = loadFromStorage(STORAGE_KEYS.staff) || [];
+    
+    if (cachedChannels.length > 0 || cachedBranches.length > 0 || 
+        cachedCategories.length > 0 || cachedStaff.length > 0) {
+      console.log('✅ Loading cached form options from localStorage');
+      setChannels(cachedChannels);
+      setBranches(cachedBranches);
+      setCategories(cachedCategories);
+      setStaffMembers(cachedStaff);
+      setLoadingOptions(false);
+    }
+  }, []); // Run once on mount
 
   useEffect(() => {
-    if (hasCachedData) {
-      console.log('Using cached form options from localStorage');
-    }
+    // Debug Supabase connection on mount
+    const debugSupabaseConnection = async () => {
+      console.log('=== SUPABASE CONNECTION DEBUG ===');
+      
+      // Check environment variables
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      console.log('📋 Environment Variables:');
+      console.log('  NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '❌ NOT SET');
+      console.log('  NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? `${supabaseKey.substring(0, 20)}...` : '❌ NOT SET');
+      
+      if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
+        console.error('❌ Supabase URL is not configured or is placeholder!');
+        return;
+      }
+      
+      if (!supabaseKey || supabaseKey === 'placeholder-key') {
+        console.error('❌ Supabase Anon Key is not configured or is placeholder!');
+        return;
+      }
+      
+      // Check Supabase client
+      console.log('📦 Supabase Client:');
+      console.log('  Client exists:', !!supabase);
+      if (supabase) {
+        console.log('  Client URL:', (supabase as any).supabaseUrl || 'N/A');
+        console.log('  Client Key:', (supabase as any).supabaseKey ? `${(supabase as any).supabaseKey.substring(0, 20)}...` : 'N/A');
+      }
+      
+      // Check session/authentication
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        console.log('🔐 Session Status:');
+        console.log('  Has session:', !!sessionData?.session);
+        console.log('  User:', sessionData?.session?.user?.email || 'None');
+        console.log('  Session error:', sessionError || 'None');
+      } catch (err) {
+        console.error('  ❌ Error checking session:', err);
+      }
+      
+      // Test basic connectivity with a simple query (with timeout)
+      console.log('🌐 Testing Database Connectivity:');
+      try {
+        const testStart = Date.now();
+        
+        // Add timeout to connectivity test
+        const testTimeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Connectivity test timeout after 10s')), 10000);
+        });
+        
+        const testQuery = supabase
+          .from('staff_members')
+          .select('id')
+          .limit(1);
+        
+        const { data, error, status, statusText } = await Promise.race([
+          testQuery,
+          testTimeout
+        ]) as Awaited<typeof testQuery>;
+        
+        const testDuration = Date.now() - testStart;
+        
+        console.log('  Query duration:', `${testDuration}ms`);
+        console.log('  HTTP status:', status, statusText);
+        console.log('  Has data:', !!data);
+        console.log('  Data length:', data?.length || 0);
+        console.log('  Error:', error || 'None');
+        
+        if (error) {
+          console.error('  ❌ Query failed:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          console.error('  💡 Check RLS policies on staff_members table');
+        } else {
+          console.log('  ✅ Database connection successful!');
+        }
+      } catch (err) {
+        const testDuration = Date.now() - Date.now(); // This will be wrong but we're in catch
+        console.error('  ❌ Exception during connectivity test:', err);
+        if (err instanceof Error) {
+          console.error('  Error message:', err.message);
+          if (err.message.includes('timeout')) {
+            console.error('  ⚠️ Query is hanging - check Network tab in browser');
+            console.error('  💡 Possible causes:');
+            console.error('     - Network connectivity issue');
+            console.error('     - CORS blocking requests');
+            console.error('     - Supabase project paused (free tier)');
+            console.error('     - Firewall/proxy blocking requests');
+          }
+        }
+      }
+      
+      console.log('=== END DEBUG ===');
+    };
+    
+    // Debug connection first
+    debugSupabaseConnection();
     
     // Fetch from database in background to update cache
     let isMounted = true;
@@ -114,6 +220,13 @@ export default function InteractionsPage() {
         
         if (!isMounted) return;
         
+        // Check if we have cached data now (after localStorage load)
+        const hasCachedData = 
+          channels.length > 0 || 
+          branches.length > 0 || 
+          categories.length > 0 || 
+          staffMembers.length > 0;
+        
         // Verify Supabase client is configured
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
@@ -126,7 +239,7 @@ export default function InteractionsPage() {
         
         // Verify Supabase client is available (it should always be, but check anyway)
         if (!supabase) {
-          console.error('Supabase client not available');
+          console.error('❌ Supabase client not available');
           if (attempt < 2) {
             setTimeout(() => fetchFromDatabase(attempt + 1), delay);
             return;
@@ -137,22 +250,36 @@ export default function InteractionsPage() {
           return;
         }
         
+        console.log(`🔄 Attempting to fetch form options (attempt ${attempt + 1})...`);
+        
         // Fetch from database (only show loading if we don't have cached data)
         if (!hasCachedData) {
           setLoadingOptions(true);
         }
         await fetchFormOptions();
       } catch (err) {
-        console.error('Error fetching form options from database:', err);
+        console.error('❌ Error fetching form options from database:', err);
+        if (err instanceof Error) {
+          console.error('  Error message:', err.message);
+          console.error('  Error stack:', err.stack);
+        }
         // Retry once more if this was the first attempt
         if (attempt < 1 && isMounted) {
-          console.log('Retrying fetch after error...');
+          console.log('🔄 Retrying fetch after error...');
           setTimeout(() => fetchFromDatabase(attempt + 1), 1000);
           return;
         }
-        // Set loading to false on error after retries (only if we don't have cached data)
-        if (isMounted && !hasCachedData) {
-          setLoadingOptions(false);
+        // Set loading to false on error after retries
+        // Check current state to see if we have cached data
+        if (isMounted) {
+          const hasCachedData = 
+            channels.length > 0 || 
+            branches.length > 0 || 
+            categories.length > 0 || 
+            staffMembers.length > 0;
+          if (!hasCachedData) {
+            setLoadingOptions(false);
+          }
         }
       }
     };
@@ -173,19 +300,67 @@ export default function InteractionsPage() {
     }
     
     try {
-      // Fetch from database
-      const results = await Promise.all([
+      console.log('🔍 Checking for form option updates...');
+      const checkStart = Date.now();
+      
+      // Use a timeout to prevent hanging - 10 seconds max
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          console.warn('⏱️ Update check timeout after 10 seconds');
+          reject(new Error('Update check timeout'));
+        }, 10000);
+      });
+      
+      // Fetch from database with timeout
+      console.log('📡 Fetching form options from database...');
+      const fetchPromise = Promise.all([
         supabase.from('staff_members').select('name').eq('active', true).order('display_order'),
         supabase.from('channels').select('name').eq('active', true).order('display_order'),
         supabase.from('branches').select('name').eq('active', true).order('display_order'),
         supabase.from('categories').select('name').eq('active', true).order('display_order'),
       ]);
       
-      const [staffResult, channelResult, branchResult, categoryResult] = results;
+      const results = await Promise.race([fetchPromise, timeoutPromise]);
+      const checkDuration = Date.now() - checkStart;
+      console.log(`✅ All queries completed in ${checkDuration}ms`);
+      
+      const [staffResult, channelResult, branchResult, categoryResult] = results as Awaited<typeof fetchPromise>;
+      
+      // Debug each result
+      console.log('📊 Query Results:');
+      console.log('  staff_members:', {
+        hasData: !!staffResult.data,
+        dataLength: staffResult.data?.length || 0,
+        hasError: !!staffResult.error,
+        error: staffResult.error?.message || 'None',
+      });
+      console.log('  channels:', {
+        hasData: !!channelResult.data,
+        dataLength: channelResult.data?.length || 0,
+        hasError: !!channelResult.error,
+        error: channelResult.error?.message || 'None',
+      });
+      console.log('  branches:', {
+        hasData: !!branchResult.data,
+        dataLength: branchResult.data?.length || 0,
+        hasError: !!branchResult.error,
+        error: branchResult.error?.message || 'None',
+      });
+      console.log('  categories:', {
+        hasData: !!categoryResult.data,
+        dataLength: categoryResult.data?.length || 0,
+        hasError: !!categoryResult.error,
+        error: categoryResult.error?.message || 'None',
+      });
       
       // Check if any queries failed
       if (staffResult.error || channelResult.error || branchResult.error || categoryResult.error) {
-        console.warn('Some queries failed, skipping update check');
+        console.warn('Some queries failed during update check:', {
+          staff: staffResult.error?.message,
+          channels: channelResult.error?.message,
+          branches: branchResult.error?.message,
+          categories: categoryResult.error?.message,
+        });
         return false;
       }
       
@@ -223,11 +398,16 @@ export default function InteractionsPage() {
         }
         return true; // Data was updated
       } else {
-        console.log('Form options unchanged, using cached data');
+        if (!silent) {
+          console.log('Form options unchanged, using cached data');
+        }
         return false; // No changes
       }
     } catch (err) {
-      console.error('Error checking form options:', err);
+      // Silently handle errors in silent mode (background checks)
+      if (!silent) {
+        console.error('Error checking form options:', err);
+      }
       return false;
     } finally {
       if (!silent) {
@@ -251,13 +431,40 @@ export default function InteractionsPage() {
       const startTime = Date.now();
       
       try {
-        // Execute query directly - let Supabase handle its own timeouts
-        // Don't wrap in Promise.race as it might interfere with Supabase's internal handling
-        console.log(`[${tableName}] Executing query...`);
-        const result = await queryFn();
-        const elapsed = Date.now() - startTime;
+        // Execute query with timeout to catch hanging queries
+        console.log(`[${tableName}] Executing query at ${new Date().toISOString()}...`);
         
+        // Create a timeout promise
+        const timeoutMs = 15000; // 15 second timeout
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Query timeout after ${timeoutMs}ms`));
+          }, timeoutMs);
+        });
+        
+        // Race between query and timeout
+        let result;
+        try {
+          result = await Promise.race([queryFn(), timeoutPromise]);
+        } catch (timeoutErr) {
+          const elapsed = Date.now() - startTime;
+          console.error(`[${tableName}] ⏱️ Query timed out after ${elapsed}ms`);
+          console.error(`[${tableName}] This suggests the query is hanging - check:`);
+          console.error(`  1. Network connectivity`);
+          console.error(`  2. Browser Network tab for pending requests`);
+          console.error(`  3. CORS settings in Supabase`);
+          console.error(`  4. RLS policies on ${tableName} table`);
+          throw timeoutErr;
+        }
+        
+        const elapsed = Date.now() - startTime;
         const { data, error } = result;
+        console.log(`[${tableName}] ✅ Query completed in ${elapsed}ms, status:`, {
+          hasData: !!data,
+          dataLength: data?.length || 0,
+          hasError: !!error,
+          errorMessage: error?.message || 'None',
+        });
         
         if (error) {
           const errorWithCode = error as { message?: string; code?: string; details?: string; hint?: string };
@@ -321,8 +528,8 @@ export default function InteractionsPage() {
       
       // Execute queries sequentially to avoid race conditions
       // This is slower but more reliable when the connection is intermittent
-      console.log('[staff_members] Starting query...');
       const staffData = await fetchWithRetry(async () => {
+        console.log('[staff_members] Starting query...');
         return await supabase
           .from('staff_members')
           .select('name')
@@ -330,8 +537,8 @@ export default function InteractionsPage() {
           .order('display_order');
       }, 0, 'staff_members');
       
-      console.log('[channels] Starting query...');
       const channelData = await fetchWithRetry(async () => {
+        console.log('[channels] Starting query...');
         return await supabase
           .from('channels')
           .select('name')
@@ -339,8 +546,8 @@ export default function InteractionsPage() {
           .order('display_order');
       }, 0, 'channels');
       
-      console.log('[branches] Starting query...');
       const branchData = await fetchWithRetry(async () => {
+        console.log('[branches] Starting query...');
         return await supabase
           .from('branches')
           .select('name')
@@ -348,8 +555,8 @@ export default function InteractionsPage() {
           .order('display_order');
       }, 0, 'branches');
       
-      console.log('[categories] Starting query...');
       const categoryData = await fetchWithRetry(async () => {
+        console.log('[categories] Starting query...');
         return await supabase
           .from('categories')
           .select('name')
