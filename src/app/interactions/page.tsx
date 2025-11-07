@@ -149,11 +149,12 @@ export default function InteractionsPage() {
         const { data, error } = result;
         
         if (error) {
+          const errorWithCode = error as { message?: string; code?: string; details?: string; hint?: string };
           console.error(`[${tableName}] Query error after ${elapsed}ms:`, {
             message: error.message,
-            code: (error as any).code,
-            details: (error as any).details,
-            hint: (error as any).hint
+            code: errorWithCode.code,
+            details: errorWithCode.details,
+            hint: errorWithCode.hint
           });
           
           // Check if it's a network/RLS/auth error
@@ -163,8 +164,8 @@ export default function InteractionsPage() {
             error.message?.includes('Failed to fetch') ||
             error.message?.includes('timeout') ||
             error.message?.includes('JWT') ||
-            (error as any).code === 'PGRST301' || // RLS policy violation
-            (error as any).code === '42501' // Insufficient privilege
+            errorWithCode.code === 'PGRST301' || // RLS policy violation
+            errorWithCode.code === '42501' // Insufficient privilege
           );
           
           if (isRetryableError && retry < 1) {
