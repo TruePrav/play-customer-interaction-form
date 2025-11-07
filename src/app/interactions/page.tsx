@@ -62,17 +62,6 @@ const loadFromStorage = (key: string): string[] | null => {
   return null;
 };
 
-const getLastUpdated = (): number | null => {
-  try {
-    if (typeof window !== 'undefined') {
-      const timestamp = localStorage.getItem(STORAGE_KEYS.lastUpdated);
-      return timestamp ? parseInt(timestamp, 10) : null;
-    }
-  } catch (error) {
-    console.warn('Failed to get last updated timestamp:', error);
-  }
-  return null;
-};
 
 export default function InteractionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,10 +120,8 @@ export default function InteractionsPage() {
       // Check Supabase client
       console.log('📦 Supabase Client:');
       console.log('  Client exists:', !!supabase);
-      if (supabase) {
-        console.log('  Client URL:', (supabase as any).supabaseUrl || 'N/A');
-        console.log('  Client Key:', (supabase as any).supabaseKey ? `${(supabase as any).supabaseKey.substring(0, 20)}...` : 'N/A');
-      }
+      // Note: Supabase client internal properties are not directly accessible
+      // We verify it's configured by checking environment variables above
       
       // Check session/authentication
       try {
@@ -187,7 +174,6 @@ export default function InteractionsPage() {
           console.log('  ✅ Database connection successful!');
         }
       } catch (err) {
-        const testDuration = Date.now() - Date.now(); // This will be wrong but we're in catch
         console.error('  ❌ Exception during connectivity test:', err);
         if (err instanceof Error) {
           console.error('  Error message:', err.message);
